@@ -198,9 +198,10 @@ body {
 /* floating poster deck — fills the hero's right side on wide screens */
 .hero-deck {
   position: absolute;
-  right: clamp(20px, 5vw, 90px);
-  top: 40%;
+  right: clamp(20px, 6vw, 200px);
+  top: 46%;
   transform: translateY(-50%) rotate(4deg);
+  transform-origin: center;
   width: 380px; height: 430px;
   pointer-events: none;
   animation: rise 0.9s 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -233,6 +234,13 @@ body {
   50% { margin-top: -12px; }
 }
 @media (max-width: 1180px) { .hero-deck { display: none; } }
+/* grow the deck into the extra room on big screens */
+@media (min-width: 1600px) {
+  .hero-deck { transform: translateY(-50%) rotate(4deg) scale(1.22); right: 8vw; }
+}
+@media (min-width: 1900px) {
+  .hero-deck { transform: translateY(-50%) rotate(4deg) scale(1.42); right: 10vw; }
+}
 
 /* marquee strip */
 .marquee {
