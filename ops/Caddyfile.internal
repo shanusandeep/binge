@@ -9,6 +9,10 @@
 		Cache-Control "public, max-age=3600"
 		-Server
 	}
+	# HTML must always revalidate — it carries the ?v= cache-busting
+	# versions, so a stale page pins every other asset to old versions
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
 	# the catalogue changes daily — cache it briefly
 	@data path /data/*
 	header @data Cache-Control "public, max-age=900"
