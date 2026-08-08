@@ -307,6 +307,11 @@ body {
   padding-right: 32px;
 }
 .select:focus { border-color: var(--saffron-deep); }
+.select-rating.is-set {
+  background-color: rgba(245, 197, 24, 0.16);
+  border-color: var(--imdb);
+  color: var(--imdb);
+}
 
 /* toggle */
 .toggle {

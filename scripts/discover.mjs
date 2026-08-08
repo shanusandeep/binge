@@ -17,6 +17,8 @@ import path from "node:path";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_KEY) { console.error("✗ GEMINI_API_KEY required"); process.exit(1); }
+// alias that tracks the current flash model — pinned versions get sunset
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const DRY = process.argv.includes("--dry-run");
 const yearArg = process.argv[process.argv.indexOf("--year") + 1];
 const YEAR = process.argv.includes("--year") ? Number(yearArg) : null;
@@ -30,7 +32,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const gemini = async (prompt, tries = 4) => {
   for (let i = 0; i < tries; i++) {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=4" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -90,11 +90,15 @@
         <option value="oldest">Oldest first</option>
         <option value="az">A – Z</option>
       </select>
-      <label class="toggle" for="toggle-rated">
-        <input type="checkbox" id="toggle-rated" />
-        <span class="toggle-pill" aria-hidden="true"></span>
-        <span class="toggle-label">Highly rated <b>7+</b></span>
-      </label>
+      <select class="select select-rating" id="rating-select" aria-label="Minimum IMDb rating">
+        <option value="0">Any rating</option>
+        <option value="6">IMDb 6+</option>
+        <option value="7">IMDb 7+</option>
+        <option value="7.5">IMDb 7.5+</option>
+        <option value="8">IMDb 8+</option>
+        <option value="8.5">IMDb 8.5+</option>
+        <option value="9">IMDb 9+</option>
+      </select>
       <button class="btn-clear" id="btn-clear" hidden>Clear ✕</button>
     </div>
     <div class="filter-row genre-row" id="genre-row" aria-label="Genres"></div>
@@ -154,6 +158,6 @@
   </div>
 
   <script src="data/titles.js?v=3"></script>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>

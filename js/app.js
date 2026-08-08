@@ -18,7 +18,7 @@
     lang: "all",
     genres: new Set(),
     year: "all",
-    rated: false,
+    minRating: 0,
     sort: "rating",
     q: "",
   };
@@ -85,7 +85,7 @@
     let list = TITLES.filter((t) =>
       (state.type === "all" || t.type === state.type) &&
       (state.lang === "all" || t.lang === state.lang) &&
-      (!state.rated || t.rating >= 7) &&
+      (!state.minRating || t.rating >= state.minRating) &&
       yearMatch(t) &&
       (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))) &&
       (state.q === "" || t.title.toLowerCase().includes(state.q))
@@ -153,7 +153,7 @@
 
   const isFiltered = () =>
     state.type !== "all" || state.lang !== "all" || state.genres.size > 0 ||
-    state.year !== "all" || state.rated || state.q !== "";
+    state.year !== "all" || state.minRating > 0 || state.q !== "";
 
   /* ---------- render: genre chips ---------- */
   const renderChips = () => {
@@ -296,7 +296,11 @@
 
   $("#year-select").addEventListener("change", (e) => { state.year = e.target.value; renderGrid(); });
   $("#sort-select").addEventListener("change", (e) => { state.sort = e.target.value; renderGrid(); });
-  $("#toggle-rated").addEventListener("change", (e) => { state.rated = e.target.checked; renderGrid(); });
+  $("#rating-select").addEventListener("change", (e) => {
+    state.minRating = Number(e.target.value);
+    e.target.classList.toggle("is-set", state.minRating > 0);
+    renderGrid();
+  });
 
   let qTimer;
   $("#search-input").addEventListener("input", (e) => {
@@ -318,10 +322,11 @@
 
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all";
-    state.rated = false; state.q = ""; state.genres.clear();
+    state.minRating = 0; state.q = ""; state.genres.clear();
     $("#search-input").value = "";
     $("#year-select").value = "all";
-    $("#toggle-rated").checked = false;
+    $("#rating-select").value = "0";
+    $("#rating-select").classList.remove("is-set");
     $$(".seg-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "all" || b.dataset.lang === "all"));
     renderChips();
     renderGrid();

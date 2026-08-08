@@ -20,6 +20,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
+// alias that tracks the current flash model — pinned versions get sunset
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const ONLY_MISSING = process.argv.includes("--only-missing");
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DB_FILE = path.join(ROOT, "data", "titles.js");
@@ -146,7 +148,7 @@ const gemini = async (t, missing) => {
   }[m])).join(", ")}. Use null when unknown.`;
   try {
     const d = await jfetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", ...UA },
