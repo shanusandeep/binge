@@ -32,7 +32,9 @@ const jfetch = async (url, opts = {}, tries = 5) => {
     const res = await fetch(url, { headers: UA, ...opts });
     if (res.ok) return res.json();
     if ((res.status === 429 || res.status >= 500) && i < tries - 1) {
-      await sleep(1500 * 2 ** i + Math.random() * 1000); // backoff on rate limits
+      const body = await res.text().catch(() => "");
+      const hint = body.match(/retry in ([\d.]+)s/i); // Gemini says how long
+      await sleep(hint ? (parseFloat(hint[1]) + 5) * 1000 : 1500 * 2 ** i + Math.random() * 1000);
       continue;
     }
     throw new Error(`${res.status} ${url}`);
@@ -54,24 +56,54 @@ const db = (0, eval)("(" + jsonText + ")");
 console.log(`● ${db.titles.length} titles loaded${GEMINI_KEY ? " · Gemini fallback ON" : " · no Gemini key (wiki only)"}`);
 
 /* ---------- source 1+2: Wikipedia / Wikidata ---------- */
+const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/* Does this text read like an article about THIS film/series?
+   Must talk about a film/series AND actually mention the title —
+   catches both the wrong-topic case (Kota Factory → the city of Kota)
+   and the wrong-show case (Gullak → an intro about Panchayat). */
+const looksLikeTitlePage = (text, t) =>
+  !!text &&
+  /\b(film|series|show|sitcom|miniseries|drama|thriller|comedy|documentary|anthology|season)\b/i.test(text) &&
+  // An article ABOUT a title STARTS with it ("Dupahiya is a …"), while an
+  // actor's bio merely mentions it later ("Sparsh Shrivastava … known for
+  // Dupahiya (2025)") — so the title must appear in the opening words.
+  // First two words is enough: wiki page names sometimes drop subtitles
+  // ("Mumbai Diaries 26/11" → "Mumbai Diaries").
+  norm(text).slice(0, 80).includes(norm(t.title).split(" ").slice(0, 2).join(" "));
+
 const wikiSearch = async (t) => {
   const kind = t.type === "movie" ? "film" : "TV series";
-  const q = `${t.title} ${t.year} ${t.lang === "hi" ? "Hindi" : ""} ${kind}`;
-  const d = await jfetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&format=json&origin=*`);
-  const hits = d.query?.search || [];
-  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const target = norm(t.title);
-  // prefer a hit whose page title actually contains the movie title
-  return (hits.find((h) => norm(h.title).includes(target)) || hits[0])?.title || null;
+  const target = norm(t.title).split(" ").slice(0, 2).join(" ");
+  const queries = [
+    `${t.title} ${t.year} ${t.lang === "hi" ? "Hindi" : ""} ${kind}`,
+    `intitle:"${t.title}" ${kind}`, // second pass: exact-title pages only
+  ];
+  const candidates = [];
+  for (const q of queries) {
+    const d = await jfetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=8&format=json&origin=*`);
+    // NEVER fall back to an unrelated first hit (that's how Kota Factory
+    // once became the city of Kota) — the page title must contain the title
+    for (const h of d.query?.search || [])
+      if (norm(h.title).includes(target) && !candidates.includes(h.title)) candidates.push(h.title);
+    if (candidates.length >= 3) break;
+  }
+  return candidates.slice(0, 3);
 };
 
-const wikiPage = async (pageTitle) => {
-  const d = await jfetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|extracts|pageprops&titles=${encodeURIComponent(pageTitle)}&piprop=thumbnail&pithumbsize=600&exintro=1&explaintext=1&ppprop=wikibase_item&redirects=1&format=json&origin=*`);
-  const page = Object.values(d.query?.pages || {})[0] || {};
+/* REST summary: CDN-cached (gentler than the action API) and, unlike
+   pageimages, it returns fair-use lead images — i.e. actual film posters. */
+const wikiPage = async (pageTitle, t) => {
+  const d = await jfetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle.replace(/ /g, "_"))}`);
+  const desc = (d.extract || "").replace(/\s+/g, " ").trim().slice(0, 550) || null;
+  // reject the whole page (poster, desc AND wikidata id) if the intro
+  // doesn't read like an article about this film/series
+  if (!looksLikeTitlePage(desc, t)) return { poster: null, desc: null, qid: null };
+  const img = (d.originalimage?.width || 9999) <= 1200 ? d.originalimage?.source : d.thumbnail?.source;
   return {
-    poster: page.thumbnail?.source || null,
-    desc: (page.extract || "").replace(/\s+/g, " ").trim().slice(0, 550) || null,
-    qid: page.pageprops?.wikibase_item || null,
+    poster: img ? img.split("?")[0] : null,
+    desc,
+    qid: d.wikibase_item || null,
   };
 };
 
@@ -88,8 +120,10 @@ const wikidata = async (qid) => {
     labels = Object.fromEntries(Object.entries(ld.entities || {}).map(([k, v]) => [k, v.labels?.en?.value]));
   }
   const dur = val("P2047");
+  const imdbId = val("P345");
   return {
-    imdb: val("P345") || null,
+    // people carry nm… ids in P345 — only tt… title ids build valid links
+    imdb: /^tt\d+$/.test(imdbId || "") ? imdbId : null,
     director: dirIds.map((i) => labels[i]).filter(Boolean).join(", ") || null,
     cast: castIds.map((i) => labels[i]).filter(Boolean),
     runtime: dur ? Math.round(Number(dur.amount)) : null,
@@ -97,8 +131,9 @@ const wikidata = async (qid) => {
 };
 
 /* ---------- source 3: Gemini 2.5 Flash w/ search grounding ---------- */
+let geminiDead = 0; // consecutive hard failures → assume daily quota gone
 const gemini = async (t, missing) => {
-  if (!GEMINI_KEY) return {};
+  if (!GEMINI_KEY || geminiDead >= 3) return {};
   await geminiSlot();
   const kind = t.type === "movie" ? "film" : "web series";
   const lang = t.lang === "hi" ? "Hindi" : "English";
@@ -107,7 +142,7 @@ const gemini = async (t, missing) => {
     director: `"director": director name(s) as one string`,
     cast: `"cast": array of the top 5 actor names`,
     runtime: `"runtime": ${t.type === "movie" ? "runtime in minutes as integer" : "average episode length in minutes as integer"}`,
-    desc: `"desc": a 2-sentence spoiler-free synopsis`,
+    desc: `"desc": a 2-sentence spoiler-free synopsis that MUST begin with "${t.title} is a ${lang} ${kind}"`,
   }[m])).join(", ")}. Use null when unknown.`;
   try {
     const d = await jfetch(
@@ -121,6 +156,7 @@ const gemini = async (t, missing) => {
         }),
       }
     );
+    geminiDead = 0;
     const text = (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return {};
@@ -133,9 +169,42 @@ const gemini = async (t, missing) => {
       desc: typeof j.desc === "string" ? j.desc.slice(0, 550) : null,
     };
   } catch (e) {
-    console.warn(`  ⚠ gemini failed for ${t.title}: ${e.message.slice(0, 80)}`);
+    geminiDead++;
+    if (geminiDead === 3) console.warn("  ⚠ gemini disabled for this run (repeated failures — likely daily quota)");
+    else console.warn(`  ⚠ gemini failed for ${t.title}: ${e.message.slice(0, 80)}`);
     return {};
   }
+};
+
+/* ---------- poster fallback: TVmaze (free, keyless, strong series
+   coverage incl. Indian web series) ---------- */
+const tvmazePoster = async (t) => {
+  if (t.type !== "series") return null;
+  try {
+    const d = await jfetch(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(t.title)}`);
+    const yr = Number((d.premiered || "").slice(0, 4));
+    if (yr && Math.abs(yr - t.year) > 1) return null;
+    return d.image?.original || d.image?.medium || null;
+  } catch { return null; }
+};
+
+/* ---------- poster fallback: iTunes artwork (free, keyless).
+   100x100 thumb URL upscales cleanly to 600x600. ---------- */
+const itunesPoster = async (t) => {
+  const media = t.type === "movie" ? "movie" : "tvShow";
+  for (const country of ["in", "us"]) {
+    try {
+      const d = await jfetch(`https://itunes.apple.com/search?term=${encodeURIComponent(t.title)}&media=${media}&country=${country}&limit=5`);
+      const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const hit = (d.results || []).find((r) => {
+        const name = r.trackName || r.collectionName || "";
+        const yr = new Date(r.releaseDate || 0).getFullYear();
+        return norm(name).includes(norm(t.title)) && Math.abs(yr - t.year) <= 1;
+      });
+      if (hit?.artworkUrl100) return hit.artworkUrl100.replace("100x100", "600x600");
+    } catch { /* try next country */ }
+  }
+  return null;
 };
 
 /* ---------- enrich one title ---------- */
@@ -143,11 +212,17 @@ const FIELDS = ["poster", "desc", "imdb", "director", "cast", "runtime"];
 let geminiCalls = 0;
 
 const enrich = async (t) => {
+  // repair pass: wipe fields that came from a mismatched page (a city, an
+  // actor's bio, another show). Every legitimate desc — wiki or Gemini —
+  // opens with the title, so failing validation means pollution.
+  if (t.desc && !looksLikeTitlePage(t.desc, t)) {
+    for (const f of ["poster", "desc", "imdb", "director", "cast", "runtime"]) delete t[f];
+  }
   if (ONLY_MISSING && t.poster && t.imdb && t.director) return "skip";
   try {
-    const page = await wikiSearch(t);
-    if (page) {
-      const w = await wikiPage(page);
+    for (const page of await wikiSearch(t)) {
+      const w = await wikiPage(page, t);
+      if (!w.desc) continue; // page didn't validate — try the next candidate
       t.poster = t.poster || w.poster;
       t.desc = t.desc || w.desc;
       if (w.qid) {
@@ -157,10 +232,17 @@ const enrich = async (t) => {
         t.cast = t.cast?.length ? t.cast : wd.cast;
         t.runtime = t.runtime || wd.runtime;
       }
+      break;
     }
   } catch (e) {
     console.warn(`  ⚠ wiki failed for ${t.title}: ${e.message.slice(0, 80)}`);
   }
+  // series: prefer TVmaze art (high-res) — small wiki posters over-zoom on cards
+  if (t.type === "series") {
+    const tm = await tvmazePoster(t);
+    if (tm) t.poster = tm;
+  }
+  if (!t.poster) t.poster = await itunesPoster(t);
   const missing = FIELDS.filter((f) => f !== "poster" && (t[f] == null || (Array.isArray(t[f]) && !t[f].length)));
   if (missing.length && GEMINI_KEY) {
     geminiCalls++;
@@ -173,10 +255,11 @@ const enrich = async (t) => {
 /* ---------- run with small concurrency pool ---------- */
 const queue = [...db.titles];
 let done = 0, noPoster = [];
-await Promise.all(Array.from({ length: 3 }, async () => {
+/* single worker + generous spacing — Wikipedia 429s anonymous bursts hard */
+await Promise.all(Array.from({ length: 1 }, async () => {
   while (queue.length) {
     const t = queue.shift();
-    await sleep(120); // stay polite with the wiki APIs
+    await sleep(600); // stay polite with the wiki APIs
     const r = await enrich(t);
     if (r === "no-poster") noPoster.push(t.title);
     done++;

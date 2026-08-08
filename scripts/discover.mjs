@@ -37,7 +37,13 @@ const gemini = async (prompt, tries = 4) => {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] }),
       }
     );
-    if (res.status === 429 || res.status >= 500) { await sleep(8000 * (i + 1)); continue; }
+    if (res.status === 429 || res.status >= 500) {
+      // the API says how long to wait — honour it (plus a little margin)
+      const body = await res.text().catch(() => "");
+      const hint = body.match(/retry in ([\d.]+)s/i);
+      await sleep(hint ? (parseFloat(hint[1]) + 5) * 1000 : 65000);
+      continue;
+    }
     if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 120)}`);
     const d = await res.json();
     return (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");

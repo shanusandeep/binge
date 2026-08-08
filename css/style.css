@@ -38,8 +38,10 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background-image:
-    radial-gradient(1100px 500px at 85% -10%, rgba(255, 180, 58, 0.07), transparent 60%),
-    radial-gradient(800px 420px at -10% 20%, rgba(232, 80, 58, 0.05), transparent 55%);
+    radial-gradient(1100px 520px at 85% -10%, rgba(255, 180, 58, 0.16), transparent 60%),
+    radial-gradient(900px 460px at -10% 18%, rgba(232, 80, 58, 0.10), transparent 55%),
+    radial-gradient(1000px 600px at 50% 105%, rgba(255, 180, 58, 0.07), transparent 60%),
+    linear-gradient(180deg, #14100b 0%, var(--bg) 30%);
 }
 
 ::selection { background: var(--saffron); color: #140d02; }
