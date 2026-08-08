@@ -20,15 +20,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Sync from TMDB
+      - name: Discover new releases (Gemini + Google Search)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ]; then node scripts/discover.mjs || echo "discover failed (non-fatal)"; else echo "no GEMINI_API_KEY — skipping"; fi
+      - name: Sync from TMDB (optional)
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-        run: node scripts/sync.mjs
+        run: |
+          if [ -n "$TMDB_API_KEY" ]; then node scripts/sync.mjs; else echo "no TMDB_API_KEY — skipping"; fi
       - name: Enrich new titles (posters, cast, IMDb ids)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: node scripts/enrich.mjs --only-missing
+        run: |
+          if [ -n "$GEMINI_API_KEY" ]; then node scripts/enrich.mjs --only-missing || echo "enrich failed (non-fatal)"; else echo "no GEMINI_API_KEY — skipping"; fi
       - name: Commit & push if changed
         run: |
           git config user.name "binge-bot"

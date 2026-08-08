@@ -52,11 +52,13 @@ EOF
   ok "route added"
 fi
 
-# ---- 3. first deploy (also reloads caddy once the container exists) ----
-BRANCH="${BRANCH:-main}" "$REPO_DIR/ops/deploy.sh" || die "deploy failed"
-
+# ---- 3. reload edge caddy (must happen BEFORE the deploy health check,
+#         otherwise no TLS cert exists yet and the check can never pass) ----
 CADDY_CONTAINER=$(sudo docker ps --format '{{.Names}}' | grep -i caddy | head -1)
 [[ -n "$CADDY_CONTAINER" ]] && sudo docker exec "$CADDY_CONTAINER" caddy reload --config /etc/caddy/Caddyfile \
   && ok "edge caddy reloaded ($CADDY_CONTAINER)"
+
+# ---- 4. first deploy ----
+BRANCH="${BRANCH:-main}" "$REPO_DIR/ops/deploy.sh" || die "deploy failed"
 
 ok "done — https://$DOMAIN"
