@@ -195,8 +195,51 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* floating poster deck — fills the hero's right side on wide screens */
+.hero-deck {
+  position: absolute;
+  right: clamp(20px, 5vw, 90px);
+  top: 40%;
+  transform: translateY(-50%) rotate(4deg);
+  width: 380px; height: 430px;
+  pointer-events: none;
+  animation: rise 0.9s 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.deck-card {
+  position: absolute;
+  width: 190px; aspect-ratio: 2 / 3;
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255, 200, 120, 0.22);
+  box-shadow: 0 30px 60px -18px rgba(0, 0, 0, 0.85), 0 0 40px -18px rgba(255, 180, 58, 0.5);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s;
+  animation: deck-float 7s ease-in-out infinite;
+}
+.deck-card:hover {
+  transform: scale(1.07) rotate(0deg) !important;
+  z-index: 9;
+  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.9), 0 0 60px -12px rgba(255, 180, 58, 0.65);
+}
+.deck-card:nth-child(1) { left: 0;    top: 60px;  transform: rotate(-10deg); z-index: 1; animation-delay: 0s; }
+.deck-card:nth-child(2) { left: 70px; top: 20px;  transform: rotate(-4deg);  z-index: 2; animation-delay: 1.2s; }
+.deck-card:nth-child(3) { left: 145px; top: 0;    transform: rotate(2deg);   z-index: 3; animation-delay: 2.4s; }
+.deck-card:nth-child(4) { left: 215px; top: 26px; transform: rotate(8deg);   z-index: 2; animation-delay: 3.6s; }
+.deck-card:nth-child(5) { left: 165px; top: 175px; transform: rotate(-3deg); z-index: 4; animation-delay: 4.8s; }
+@keyframes deck-float {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -12px; }
+}
+@media (max-width: 1180px) { .hero-deck { display: none; } }
+
 /* marquee strip */
 .marquee {
+  position: relative; z-index: 5; /* scrolls over the poster deck's toe */
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   padding: 12px 0;

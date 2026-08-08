@@ -192,6 +192,20 @@
       <div class="stat"><b>${Math.round((hindi / TITLES.length) * 100)}<em>%</em></b><span>Hindi-first</span></div>
       <div class="stat"><b>${great}</b><span>Rated 8.0+</span></div>`;
 
+    /* floating poster deck — top-rated Hindi picks, clickable */
+    const deck = $("#hero-deck");
+    if (deck) {
+      const picks = TITLES
+        .filter((t) => t.poster && t.rating >= 8.2 && t.lang === "hi")
+        .sort((a, b) => b.rating - a.rating)
+        .filter((_, i) => i % 2 === 0) // skip alternates for variety
+        .slice(0, 5);
+      deck.innerHTML = picks.map((t) => `
+        <div class="deck-card" data-id="${t._id}" role="button" tabindex="-1"
+          aria-label="${esc(t.title)} — details" title="${esc(t.title)}"
+          style="background-image:url('${esc(t.poster)}')"></div>`).join("");
+    }
+
     const feed = [...TITLES].sort((a, b) => b.rating - a.rating).slice(0, 22)
       .map((t) => `<span>${t.title}<i>✦</i></span>`).join("");
     $("#marquee-track").innerHTML = feed + feed; /* doubled for seamless loop */
@@ -256,7 +270,7 @@
   /* open on card click / Enter — rating badge link is left alone */
   document.addEventListener("click", (e) => {
     if (e.target.closest(".badge-rating")) { e.stopPropagation(); return; }
-    const card = e.target.closest(".card[data-id]");
+    const card = e.target.closest(".card[data-id], .deck-card[data-id]");
     if (card) openDetail(TITLES[Number(card.dataset.id)]);
   });
   document.addEventListener("keydown", (e) => {
