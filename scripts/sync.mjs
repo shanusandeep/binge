@@ -139,10 +139,20 @@ for (const t of found) {
   added++;
 }
 
-/* ---------- backfill: posters and IMDb ids for existing titles ---------- */
-let backfilled = 0, imdbFilled = 0, epsFilled = 0;
+/* ---------- backfill: posters, IMDb ids, episodes, certifications ---------- */
+/* prefer the Indian CBFC certificate, fall back to US/GB */
+const pickCert = (list) => {
+  for (const cc of ["IN", "US", "GB"]) {
+    const row = list.find((r) => r.iso_3166_1 === cc);
+    const cert = row?.rating || row?.release_dates?.find((x) => x.certification)?.certification;
+    if (cert) return cert;
+  }
+  return null;
+};
+
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && (t.type === "movie" || t.episodes)) continue;
+  if (t.poster && t.imdb && t.cert && (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
@@ -164,9 +174,16 @@ for (const t of existing.values()) {
       if (det.number_of_episodes) { t.episodes = det.number_of_episodes; epsFilled++; }
       if (det.number_of_seasons) t.seasons = det.number_of_seasons;
     }
+    if (!t.cert) {
+      const cd = t.type === "movie"
+        ? await tmdb(`/movie/${hit.id}/release_dates`)
+        : await tmdb(`/tv/${hit.id}/content_ratings`);
+      const cert = pickCert(cd.results || []);
+      if (cert) { t.cert = cert.trim(); certFilled++; }
+    }
   } catch { /* leave as-is */ }
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications`);
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>
@@ -183,6 +200,7 @@ const entry = (t) => {
     ...(t.director && { director: t.director }),
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
+    ...(t.cert && { cert: t.cert }),
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),

@@ -18,6 +18,7 @@
     lang: "all",
     genres: new Set(),
     year: "all",
+    age: "all",
     minRating: 0,
     sort: "rating",
     q: "",
@@ -70,6 +71,15 @@
   };
 
   /* ---------- filtering ---------- */
+  /* normalise the raw certificate (CBFC / MPAA / TV) into 3 buckets */
+  const ageBucket = (cert) => {
+    if (!cert) return null;
+    const c = cert.toUpperCase().replace(/\s+/g, "");
+    if (/^(U|G|TV-Y7?(FV)?|TV-G|ALL|0\+?|6\+?|7\+?)$/.test(c)) return "u";
+    if (/^(A|R|NC-17|TV-MA|X|18|18\+)$/.test(c)) return "a";
+    return "ua"; // U/A variants, PG, PG-13, TV-14, 12–16 etc.
+  };
+
   const yearMatch = (t) => {
     const y = t.year, f = state.year;
     if (f === "all") return true;
@@ -86,6 +96,7 @@
       (state.type === "all" || t.type === state.type) &&
       (state.lang === "all" || t.lang === state.lang) &&
       (!state.minRating || t.rating >= state.minRating) &&
+      (state.age === "all" || ageBucket(t.cert) === state.age) &&
       yearMatch(t) &&
       (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))) &&
       (state.q === "" || t.title.toLowerCase().includes(state.q) ||
@@ -154,7 +165,7 @@
 
   const isFiltered = () =>
     state.type !== "all" || state.lang !== "all" || state.genres.size > 0 ||
-    state.year !== "all" || state.minRating > 0 || state.q !== "";
+    state.year !== "all" || state.age !== "all" || state.minRating > 0 || state.q !== "";
 
   /* ---------- render: genre chips ---------- */
   const renderChips = () => {
@@ -234,7 +245,8 @@
           : `~${t.runtime}m / episode`)
       : null;
     $("#detail-meta").innerHTML =
-      [`<span>${t.year}</span>`, runtime && `<span>${runtime}</span>`]
+      [`<span>${t.year}</span>`, runtime && `<span>${runtime}</span>`,
+       t.cert && `<span class="cert-tag">${esc(t.cert)}</span>`]
         .filter(Boolean).join(`<span class="dot">·</span>`) +
       `<span class="detail-genres">${t.genres.map((g) => `<span class="chip is-active">${g}</span>`).join("")}</span>`;
     $("#detail-desc").textContent = t.desc || t.plot;
@@ -322,6 +334,7 @@
     }));
 
   $("#year-select").addEventListener("change", (e) => { state.year = e.target.value; renderGrid(); });
+  $("#age-select").addEventListener("change", (e) => { state.age = e.target.value; renderGrid(); });
   $("#sort-select").addEventListener("change", (e) => { state.sort = e.target.value; renderGrid(); });
   $("#rating-select").addEventListener("change", (e) => {
     state.minRating = Number(e.target.value);
@@ -352,7 +365,8 @@
   });
 
   const clearAll = () => {
-    state.type = "all"; state.lang = "all"; state.year = "all";
+    state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all";
+    $("#age-select").value = "all";
     state.minRating = 0; state.q = ""; state.genres.clear();
     document.body.classList.remove("is-searching");
     $("#search-input").value = "";

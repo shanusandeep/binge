@@ -785,6 +785,12 @@ body.is-searching .site-header { position: sticky; top: 0; }
   color: var(--text-faint);
 }
 .detail-meta .lang-tag { color: var(--saffron); }
+.detail-meta .cert-tag {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+  color: var(--text-dim);
+}
 .detail-meta .type-tag { color: var(--chili); }
 .detail-genres { display: flex; flex-wrap: wrap; gap: 8px; }
 .detail-genres .chip { cursor: default; }

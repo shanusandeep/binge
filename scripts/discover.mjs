@@ -125,6 +125,7 @@ const entry = (t) => {
     ...(t.director && { director: t.director }),
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
+    ...(t.cert && { cert: t.cert }),
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
