@@ -774,6 +774,21 @@ a.badge-rating:hover {
   padding: 0 5px;
 }
 
+.btn-watch[hidden] { display: none; }
+.btn-watch {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.9rem; font-weight: 700;
+  color: #fff;
+  background: var(--chili);
+  border-radius: 10px;
+  padding: 10px 16px;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 8px 24px -8px rgba(232, 80, 58, 0.5);
+  white-space: nowrap;
+}
+.btn-watch:hover { transform: translateY(-2px); }
+
 @media (max-width: 640px) {
   /* let the dialog take its natural height and the veil scroll it —
      centering a too-tall dialog makes its top unreachable */

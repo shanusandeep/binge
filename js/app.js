@@ -88,7 +88,8 @@
       (!state.minRating || t.rating >= state.minRating) &&
       yearMatch(t) &&
       (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))) &&
-      (state.q === "" || t.title.toLowerCase().includes(state.q))
+      (state.q === "" || t.title.toLowerCase().includes(state.q) ||
+        (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
     );
     switch (state.sort) {
       case "rating": list.sort((a, b) => b.rating - a.rating || b.year - a.year); break;
@@ -223,9 +224,21 @@
         .filter(Boolean).join(`<span class="dot">·</span>`) +
       `<span class="detail-genres">${t.genres.map((g) => `<span class="chip is-active">${g}</span>`).join("")}</span>`;
     $("#detail-desc").textContent = t.desc || t.plot;
+    const epInfo = t.episodes
+      ? (t.seasons > 1 ? `${t.seasons} seasons · ${t.episodes} episodes` : `${t.episodes} episodes`)
+      : null;
     $("#detail-credits").innerHTML =
       (t.director ? `<dt>Director</dt><dd>${esc(t.director)}</dd>` : "") +
-      (t.cast?.length ? `<dt>Cast</dt><dd>${t.cast.map(esc).join(", ")}</dd>` : "");
+      (t.cast?.length ? `<dt>Cast</dt><dd>${t.cast.map(esc).join(", ")}</dd>` : "") +
+      (epInfo ? `<dt>Episodes</dt><dd>${epInfo}</dd>` : "") +
+      (t.tags?.length ? `<dt>Studio</dt><dd>${t.tags.map(esc).join(", ")}</dd>` : "");
+    const watch = $("#detail-watch");
+    if (t.platform === "YouTube") {
+      watch.hidden = false;
+      watch.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(t.title + " " + (t.tags?.[0] || "") + " full episodes")}`;
+    } else {
+      watch.hidden = true;
+    }
     const link = $("#detail-imdb");
     link.href = imdbURL(t);
     $("#detail-imdb-rating").textContent = t.rating.toFixed(1) + " / 10";

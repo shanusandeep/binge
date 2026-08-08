@@ -140,9 +140,9 @@ for (const t of found) {
 }
 
 /* ---------- backfill: posters and IMDb ids for existing titles ---------- */
-let backfilled = 0, imdbFilled = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb) continue;
+  if (t.poster && t.imdb && (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
@@ -159,9 +159,14 @@ for (const t of existing.values()) {
       const ext = await tmdb(`/${kind}/${hit.id}/external_ids`);
       if (/^tt\d+$/.test(ext.imdb_id || "")) { t.imdb = ext.imdb_id; imdbFilled++; }
     }
+    if (t.type === "series" && !t.episodes) {
+      const det = await tmdb(`/tv/${hit.id}`);
+      if (det.number_of_episodes) { t.episodes = det.number_of_episodes; epsFilled++; }
+      if (det.number_of_seasons) t.seasons = det.number_of_seasons;
+    }
   } catch { /* leave as-is */ }
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts`);
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>
@@ -178,6 +183,9 @@ const entry = (t) => {
     ...(t.director && { director: t.director }),
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
+    ...(t.tags?.length && { tags: t.tags }),
+    ...(t.episodes && { episodes: t.episodes }),
+    ...(t.seasons && { seasons: t.seasons }),
   };
   return "    " + JSON.stringify(o);
 };
