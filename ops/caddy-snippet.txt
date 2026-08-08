@@ -1,0 +1,13 @@
+# Append to /srv/dailydose/Caddyfile (the shared edge Caddy), then reload:
+#   sudo docker exec $(sudo docker ps --format '{{.Names}}' | grep caddy) \
+#     caddy reload --config /etc/caddy/Caddyfile
+
+binge.shanuva.com {
+	encode zstd gzip
+	reverse_proxy binge-web:80
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		-Server
+	}
+}

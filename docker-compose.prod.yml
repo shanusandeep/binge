@@ -1,0 +1,31 @@
+# binge.shanuva.com production stack for the shared shanuva server (Contabo).
+#
+# Layout on the server (mirrors the other apps):
+#   /srv/binge/repo — this git checkout (compose file lives here)
+#
+# The container joins the edge network so the shared Caddy can
+# reverse_proxy binge-web:80 for binge.shanuva.com.
+#
+# Deploy: ops/deploy.sh (run on the server).
+
+name: binge
+
+services:
+  app:
+    build:
+      context: .
+    image: binge:latest
+    container_name: binge-web
+    restart: unless-stopped
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  edge:
+    external: true
+    name: repo_dailydose-net

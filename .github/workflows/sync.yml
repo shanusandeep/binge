@@ -1,0 +1,38 @@
+name: Sync catalogue
+
+# Refreshes data/titles.js with the latest Hindi + English releases.
+# Add TMDB_API_KEY (required) and OMDB_API_KEY (optional, for true IMDb
+# ratings) as repository secrets: Settings → Secrets → Actions.
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # daily, 08:00 IST
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sync from TMDB
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+        run: node scripts/sync.mjs
+      - name: Enrich new titles (posters, cast, IMDb ids)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node scripts/enrich.mjs --only-missing
+      - name: Commit & push if changed
+        run: |
+          git config user.name "binge-bot"
+          git config user.email "actions@github.com"
+          git add data/titles.js
+          git diff --cached --quiet || git commit -m "chore: daily catalogue sync"
+          git push

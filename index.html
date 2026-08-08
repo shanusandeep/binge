@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BINGE — Your Next Obsession · Movies & Web Series Recommendations</title>
+  <meta name="description" content="Binge — hand-picked Hindi & English movies and web series with IMDb ratings. Filter by genre, language, year, and find your next obsession." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230D0B09'/><text x='50' y='72' font-size='62' text-anchor='middle' fill='%23FFB43A' font-family='Georgia'>B</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ================= HEADER ================= -->
+  <header class="site-header">
+    <a class="logo" href="#" aria-label="Binge home">
+      <span class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="1.8" fill="currentColor"/><circle cx="12" cy="17" r="1.8" fill="currentColor"/><circle cx="7" cy="12" r="1.8" fill="currentColor"/><circle cx="17" cy="12" r="1.8" fill="currentColor"/></svg>
+      </span>
+      <span class="logo-word">Binge<span class="logo-dot">.</span></span>
+    </a>
+    <div class="header-actions">
+      <label class="search" for="search-input">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search-input" type="search" placeholder="Search titles…" autocomplete="off" />
+      </label>
+      <button class="btn-genres" id="btn-my-genres">
+        <span aria-hidden="true">✦</span> My Genres
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="hero-inner">
+      <p class="hero-kicker">बिंज · binge.shanuva.com</p>
+      <h1 class="hero-title">
+        <span class="line">Your next</span>
+        <span class="line accent">obsession<span class="cursor-dot">.</span></span>
+      </h1>
+      <p class="hero-sub">Hand-picked Hindi &amp; English movies and web series, ranked by IMDb.
+        Tell us your genres — we'll queue the good stuff.</p>
+      <div class="hero-stats" id="hero-stats"></div>
+    </div>
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track" id="marquee-track"></div>
+    </div>
+  </section>
+
+  <!-- ================= FOR YOU RAIL ================= -->
+  <section class="foryou" id="foryou-section" hidden>
+    <div class="section-head">
+      <h2 class="section-title"><span class="accent">✦</span> Picked for you</h2>
+      <p class="section-note" id="foryou-note"></p>
+    </div>
+    <div class="rail" id="foryou-rail"></div>
+  </section>
+
+  <!-- ================= FILTER BAR ================= -->
+  <nav class="filterbar" id="filterbar" aria-label="Browse filters">
+    <div class="filter-row filter-row-top">
+      <div class="seg" role="tablist" aria-label="Type">
+        <button class="seg-btn is-active" data-type="all" role="tab">All</button>
+        <button class="seg-btn" data-type="movie" role="tab">Movies</button>
+        <button class="seg-btn" data-type="series" role="tab">Series</button>
+      </div>
+      <div class="seg seg-lang" role="tablist" aria-label="Language">
+        <button class="seg-btn is-active" data-lang="all" role="tab">All</button>
+        <button class="seg-btn" data-lang="hi" role="tab">हिंदी</button>
+        <button class="seg-btn" data-lang="en" role="tab">English</button>
+      </div>
+      <select class="select" id="year-select" aria-label="Year">
+        <option value="all">All years</option>
+        <option value="2026">2026</option>
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+        <option value="2023">2023</option>
+        <option value="2020s">2020s</option>
+        <option value="2010s">2010s</option>
+        <option value="2000s">2000s</option>
+        <option value="1990s">1990s</option>
+        <option value="classic">Before 1990</option>
+      </select>
+      <select class="select" id="sort-select" aria-label="Sort">
+        <option value="rating">All-time best (IMDb)</option>
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="az">A – Z</option>
+      </select>
+      <label class="toggle" for="toggle-rated">
+        <input type="checkbox" id="toggle-rated" />
+        <span class="toggle-pill" aria-hidden="true"></span>
+        <span class="toggle-label">Highly rated <b>7+</b></span>
+      </label>
+      <button class="btn-clear" id="btn-clear" hidden>Clear ✕</button>
+    </div>
+    <div class="filter-row genre-row" id="genre-row" aria-label="Genres"></div>
+  </nav>
+
+  <!-- ================= RESULTS ================= -->
+  <main class="results">
+    <div class="results-meta"><span id="results-count"></span></div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty-state" hidden>
+      <p class="empty-mark" aria-hidden="true">╮(╯▂╰)╭</p>
+      <p>Nothing matches that combination.</p>
+      <button class="btn-genres" id="btn-empty-clear">Clear all filters</button>
+    </div>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="site-footer">
+    <div class="footer-brand">Binge<span class="logo-dot">.</span></div>
+    <p>Curated with ♥ for the Indian binge-watcher · <a href="https://binge.shanuva.com">binge.shanuva.com</a></p>
+    <p class="footer-fine">Ratings from IMDb · Catalogue synced <span id="synced-at"></span> · Not affiliated with IMDb or any streaming platform.</p>
+  </footer>
+
+  <!-- ================= GENRE PICKER MODAL ================= -->
+  <div class="modal-veil" id="modal-veil" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <p class="modal-kicker">✦ Personalise</p>
+      <h3 class="modal-title" id="modal-title">What do you love watching?</h3>
+      <p class="modal-sub">Pick up to 4 favourite genres. We'll open every visit with picks made for you.</p>
+      <div class="modal-genres" id="modal-genres"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="modal-skip">Skip for now</button>
+        <button class="btn-solid" id="modal-save" disabled>Save my genres</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TITLE DETAIL POPUP ================= -->
+  <div class="detail-veil" id="detail-veil" hidden>
+    <div class="detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <button class="detail-close" id="detail-close" aria-label="Close">✕</button>
+      <div class="detail-media" id="detail-media"></div>
+      <div class="detail-body">
+        <p class="detail-kicker" id="detail-kicker"></p>
+        <h3 class="detail-title" id="detail-title"></h3>
+        <div class="detail-meta" id="detail-meta"></div>
+        <p class="detail-desc" id="detail-desc"></p>
+        <dl class="detail-credits" id="detail-credits"></dl>
+        <div class="detail-foot">
+          <a class="btn-imdb" id="detail-imdb" href="#" target="_blank" rel="noopener">
+            <b>IMDb</b> <span id="detail-imdb-rating"></span> ↗
+          </a>
+          <span class="card-platform" id="detail-platform"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data/titles.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

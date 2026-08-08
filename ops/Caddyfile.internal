@@ -1,0 +1,15 @@
+# Internal Caddyfile for the binge-web container.
+# TLS is terminated by the shared edge Caddy; this just serves static files.
+:80 {
+	root * /srv/www
+	encode zstd gzip
+	file_server
+
+	header {
+		Cache-Control "public, max-age=3600"
+		-Server
+	}
+	# the catalogue changes daily — cache it briefly
+	@data path /data/*
+	header @data Cache-Control "public, max-age=900"
+}
