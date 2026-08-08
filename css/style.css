@@ -638,6 +638,12 @@ a.badge-rating:hover {
 .btn-solid:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-solid:not(:disabled):hover { background: #ffc35e; }
 
+/* ---------- search mode: results only ---------- */
+body.is-searching .hero,
+body.is-searching .foryou { display: none; }
+body.is-searching .filterbar { margin-top: 0; }
+body.is-searching .site-header { position: sticky; top: 0; }
+
 /* ---------- title detail popup ---------- */
 .detail-veil[hidden] { display: none; }
 .detail-veil {

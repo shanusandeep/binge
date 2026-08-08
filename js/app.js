@@ -320,6 +320,10 @@
     clearTimeout(qTimer);
     qTimer = setTimeout(() => {
       state.q = e.target.value.trim().toLowerCase();
+      // search mode: hide hero/rail so results sit right under the box
+      const searching = state.q !== "";
+      document.body.classList.toggle("is-searching", searching);
+      if (searching) window.scrollTo({ top: 0 });
       renderGrid();
     }, 120);
   });
@@ -336,6 +340,7 @@
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all";
     state.minRating = 0; state.q = ""; state.genres.clear();
+    document.body.classList.remove("is-searching");
     $("#search-input").value = "";
     $("#year-select").value = "all";
     $("#rating-select").value = "0";
