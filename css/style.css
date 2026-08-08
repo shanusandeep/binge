@@ -768,24 +768,85 @@ a.badge-rating:hover {
 }
 
 @media (max-width: 640px) {
-  .detail { grid-template-columns: 1fr; max-height: 90vh; }
+  /* let the dialog take its natural height and the veil scroll it —
+     centering a too-tall dialog makes its top unreachable */
+  .detail-veil { place-items: start center; }
+  .detail {
+    grid-template-columns: 1fr;
+    max-height: none;
+    margin: 8px 0 24px;
+  }
+  .detail-body { overflow: visible; }
   .detail-media { min-height: 230px; max-height: 260px; }
   .detail-media::after {
     background: linear-gradient(180deg, transparent 40%, var(--bg-2) 100%);
   }
+  /* stacked layout: the body title sits right below — don't repeat it */
+  .detail-media .fallback-word { display: none; }
 }
 
 /* ---------- responsive ---------- */
 @media (max-width: 720px) {
-  .filterbar { top: 57px; }
-  .hero-stats { gap: 24px; }
-  .search input { width: 96px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); }
+  /* header scrolls away; the filter bar takes over the top edge */
+  .site-header { position: static; }
+  .filterbar { top: 0; }
+  .hero-stats { gap: 20px 28px; margin: 32px 0 36px; }
+  .stat b { font-size: 1.5rem; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: 14px; }
+
+  /* filters collapse to two slim horizontally-scrollable rows */
+  .filter-row-top {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 10px;
+  }
+  .filter-row-top::-webkit-scrollbar { display: none; }
+  /* fade hints that the row scrolls sideways */
+  .filter-row-top, .genre-row {
+    -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
+  .filter-row-top > * { flex: 0 0 auto; }
+  .toggle-label { white-space: nowrap; }
 }
-@media (max-width: 480px) {
-  .logo-word { font-size: 1.4rem; }
-  .btn-genres { padding: 8px 12px; font-size: 0.78rem; }
-  .rail { grid-auto-columns: 82vw; }
+
+@media (max-width: 560px) {
+  .site-header { padding: 10px 14px; gap: 10px; }
+  .logo { gap: 7px; }
+  .logo-word { font-size: 1.35rem; }
+  .logo-mark svg { width: 21px; height: 21px; }
+  .search { flex: 1; min-width: 0; padding: 7px 12px; }
+  .search input { width: 100%; min-width: 0; }
+  .btn-genres { padding: 8px 12px; font-size: 0.76rem; }
+
+  .hero { padding-top: 40px; }
+  .hero-kicker { letter-spacing: 0.22em; font-size: 0.78rem; }
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 12px;
+  }
+
+  .rail { grid-auto-columns: 44vw; gap: 12px; }
+
+  .poster-word { font-size: 1.15rem; }
+  .poster { padding: 12px; }
+  .badge-rating { font-size: 0.72rem; padding: 3px 7px; top: 8px; left: 8px; }
+  .badge-top { display: none; }
+  .card-body { padding: 10px 12px 12px; gap: 7px; }
+  .card-meta { font-size: 0.68rem; letter-spacing: 0.05em; }
+  .card-foot { flex-wrap: wrap; font-size: 0.72rem; }
+  .card-platform { padding: 2px 8px; }
+
+  .section-head { gap: 6px; flex-direction: column; }
+
+  .detail-media .poster-glyph { font-size: 6.5rem; }
+  .detail-credits { grid-template-columns: 1fr; gap: 2px; }
+  .detail-credits dt { margin-top: 8px; }
+  .detail-foot { flex-wrap: wrap; }
+
+  .site-footer { padding: 34px 18px 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
