@@ -88,6 +88,8 @@ for (const [kind, params] of queries) {
       rating: Math.round(r.vote_average * 10) / 10,
       platform: "Streaming",
       plot: (r.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "Recently released — synopsis coming soon.",
+      ...(r.poster_path && { poster: `https://image.tmdb.org/t/p/w500${r.poster_path}` }),
+      ...(r.overview && { desc: r.overview.replace(/\s+/g, " ").trim().slice(0, 550) }),
     });
   }
 }
@@ -127,6 +129,26 @@ for (const t of found) {
   existing.set(key, t);
   added++;
 }
+
+/* ---------- poster backfill: any existing title still without one ---------- */
+let backfilled = 0;
+for (const t of existing.values()) {
+  if (t.poster) continue;
+  try {
+    const kind = t.type === "movie" ? "movie" : "tv";
+    const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
+    const d = await tmdb(`/search/${kind}`, params);
+    const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const hit = (d.results || []).find((r) =>
+      norm(r.title || r.name).includes(norm(t.title).slice(0, 14)) && r.poster_path);
+    if (hit) {
+      t.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path}`;
+      if (!t.desc && hit.overview) t.desc = hit.overview.replace(/\s+/g, " ").trim().slice(0, 550);
+      backfilled++;
+    }
+  } catch { /* leave gradient fallback */ }
+}
+console.log(`● poster backfill: ${backfilled} filled`);
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>

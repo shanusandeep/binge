@@ -214,10 +214,15 @@ const FIELDS = ["poster", "desc", "imdb", "director", "cast", "runtime"];
 let geminiCalls = 0;
 
 const enrich = async (t) => {
-  // repair pass: wipe fields that came from a mismatched page (a city, an
-  // actor's bio, another show). Every legitimate desc — wiki or Gemini —
-  // opens with the title, so failing validation means pollution.
-  if (t.desc && !looksLikeTitlePage(t.desc, t)) {
+  // repair pass: wipe fields that came from a mismatched wiki page (a city,
+  // an actor's bio, another show). Those read like an encyclopedia entry
+  // about some OTHER subject: "<Something else> is a/an …". Plain synopses
+  // (TMDB overviews like "Two outlaws are hired…") are left alone.
+  if (
+    t.desc && !looksLikeTitlePage(t.desc, t) &&
+    /^[^.]{0,80}\bis (a|an|the)\b/i.test(t.desc) &&
+    /\b(film|series|show|actor|actress|city|comedian|personality)\b/i.test(t.desc)
+  ) {
     for (const f of ["poster", "desc", "imdb", "director", "cast", "runtime"]) delete t[f];
   }
   if (ONLY_MISSING && t.poster && t.imdb && t.director) return "skip";
