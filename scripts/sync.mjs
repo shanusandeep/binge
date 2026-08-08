@@ -26,7 +26,10 @@ if (!TMDB_KEY) {
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DB_FILE = path.join(ROOT, "data", "titles.js");
 const TMDB = "https://api.themoviedb.org/3";
-const MIN_VOTES = 25;          // ignore titles with too few TMDB votes
+// TMDB's userbase is Western-skewed: Hindi web series get single-digit vote
+// counts even when hugely popular in India — so the floor must be language-
+// and type-aware or Indian series never make it in.
+const minVotes = (lang, kind) => (lang === "hi" ? (kind === "tv" ? 3 : 10) : 25);
 const LOOKBACK_DAYS = 400;     // how far back "latest" reaches
 const PAGES = 3;               // TMDB pages per discover query
 
@@ -77,9 +80,15 @@ for (const [kind, params] of queries) {
     const title = (r.title || r.name || "").trim();
     const date = r.release_date || r.first_air_date || "";
     const year = Number(date.slice(0, 4));
-    if (!title || !year || r.vote_count < MIN_VOTES) continue;
     const lang = r.original_language === "hi" ? "hi" : "en";
+    if (!title || !year || r.vote_count < minVotes(lang, kind)) continue;
+    let imdb = null;
+    try {
+      const ext = await tmdb(`/${kind}/${r.id}/external_ids`);
+      if (/^tt\d+$/.test(ext.imdb_id || "")) imdb = ext.imdb_id;
+    } catch { /* fine — enrich can find it later */ }
     found.push({
+      ...(imdb && { imdb }),
       title,
       type: kind === "movie" ? "movie" : "series",
       year,
@@ -130,25 +139,29 @@ for (const t of found) {
   added++;
 }
 
-/* ---------- poster backfill: any existing title still without one ---------- */
-let backfilled = 0;
+/* ---------- backfill: posters and IMDb ids for existing titles ---------- */
+let backfilled = 0, imdbFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster) continue;
+  if (t.poster && t.imdb) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
     const d = await tmdb(`/search/${kind}`, params);
     const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const hit = (d.results || []).find((r) =>
-      norm(r.title || r.name).includes(norm(t.title).slice(0, 14)) && r.poster_path);
-    if (hit) {
+    const hit = (d.results || []).find((r) => norm(r.title || r.name).includes(norm(t.title).slice(0, 14)));
+    if (!hit) continue;
+    if (!t.poster && hit.poster_path) {
       t.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path}`;
       if (!t.desc && hit.overview) t.desc = hit.overview.replace(/\s+/g, " ").trim().slice(0, 550);
       backfilled++;
     }
-  } catch { /* leave gradient fallback */ }
+    if (!t.imdb) {
+      const ext = await tmdb(`/${kind}/${hit.id}/external_ids`);
+      if (/^tt\d+$/.test(ext.imdb_id || "")) { t.imdb = ext.imdb_id; imdbFilled++; }
+    }
+  } catch { /* leave as-is */ }
 }
-console.log(`● poster backfill: ${backfilled} filled`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids`);
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>
