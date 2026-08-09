@@ -367,6 +367,7 @@
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all";
     $("#age-select").value = "all";
+    $$(".top-link").forEach((b) => b.classList.remove("is-active"));
     state.minRating = 0; state.q = ""; state.genres.clear();
     document.body.classList.remove("is-searching");
     $("#search-input").value = "";
@@ -379,6 +380,26 @@
   };
   $("#btn-clear").addEventListener("click", clearAll);
   $("#btn-empty-clear").addEventListener("click", clearAll);
+
+  /* ---------- quick-view presets (header links) ---------- */
+  const applyPreset = (name) => {
+    clearAll();
+    if (name === "recent") {
+      state.sort = "newest";
+      $("#sort-select").value = "newest";
+    } else { /* hits: the all-time greats */
+      state.sort = "rating";
+      $("#sort-select").value = "rating";
+      state.minRating = 8;
+      $("#rating-select").value = "8";
+      $("#rating-select").classList.add("is-set");
+    }
+    renderGrid();
+    $$(".top-link").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
+    $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  $$(".top-link").forEach((b) =>
+    b.addEventListener("click", () => applyPreset(b.dataset.preset)));
 
   $("#btn-my-genres").addEventListener("click", openModal);
   $("#modal-skip").addEventListener("click", closeModal);
