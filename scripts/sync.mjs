@@ -15,6 +15,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 
 const TMDB_KEY = process.env.TMDB_API_KEY;
 const OMDB_KEY = process.env.OMDB_API_KEY;
@@ -194,6 +195,29 @@ for (const t of existing.values()) {
   } catch { /* leave as-is */ }
 }
 console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates`);
+
+/* ---------- true IMDb ratings from IMDb's official daily dataset ----------
+   https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
+   for every tt id we hold. Overrides TMDB approximations everywhere. */
+try {
+  const res = await fetch("https://datasets.imdbws.com/title.ratings.tsv.gz");
+  if (!res.ok) throw new Error(`dataset ${res.status}`);
+  const tsv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
+  const wanted = new Map();
+  for (const t of existing.values()) if (t.imdb) wanted.set(t.imdb, t);
+  let imdbExact = 0;
+  for (const line of tsv.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const t = wanted.get(line.slice(0, tab));
+    if (!t) continue;
+    const rating = Number(line.slice(tab + 1, line.indexOf("\t", tab + 1)));
+    if (rating >= 1 && rating <= 10 && rating !== t.rating) { t.rating = rating; imdbExact++; }
+  }
+  console.log(`● IMDb dataset: ${imdbExact} ratings set to exact IMDb scores (${wanted.size} ids matched against)`);
+} catch (e) {
+  console.warn(`⚠ IMDb dataset unavailable (${e.message}) — keeping existing ratings`);
+}
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>
