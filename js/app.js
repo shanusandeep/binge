@@ -144,7 +144,7 @@
           <span class="type-tag">${typeTag}</span><span class="dot">·</span>
           <span>${t.year}</span><span class="dot">·</span>
           <span class="lang-tag">${langTag}</span>
-          ${t.seasons ? `<span class="dot">·</span><span title="${t.seasons} season${t.seasons > 1 ? "s" : ""}, ${t.episodes} episodes">${t.seasons} S · ${t.episodes} Ep</span>` : ""}
+          ${t.seasons ? `<span class="se-tag" title="${t.seasons} season${t.seasons > 1 ? "s" : ""}, ${t.episodes} episodes">${t.seasons}S · ${t.episodes}Ep</span>` : ""}
         </p>
         <p class="card-foot">
           <span class="card-genres">${t.genres.slice(0, 2).join(" / ")}</span>
