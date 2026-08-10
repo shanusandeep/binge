@@ -80,7 +80,7 @@
   };
 
   /* ---------- filtering ---------- */
-  /* normalise the raw certificate (CBFC / MPAA / TV) into 3 buckets */
+  /* normalise the raw certificate (CBFC / MPAA / US-TV) into 3 buckets */
   const ageBucket = (cert) => {
     if (!cert) return null;
     const c = cert.toUpperCase().replace(/\s+/g, "");
@@ -88,6 +88,23 @@
     if (/^(A|R|NC-17|TV-MA|X|18|18\+)$/.test(c)) return "a";
     return "ua"; // U/A variants, PG, PG-13, TV-14, 12–16 etc.
   };
+
+  /* show every certificate in the Indian system, so the chips and the
+     age filter speak the same language (TV-PG → U/A 7+, TV-MA → A, …) */
+  const CERT_LABEL = {
+    G: "U", "TV-Y": "U", "TV-Y7": "U", "TV-Y7-FV": "U", "TV-G": "U", ALL: "U",
+    PG: "U/A 7+", "TV-PG": "U/A 7+", "7+": "U/A 7+", "6+": "U/A 7+",
+    "PG-13": "U/A 13+", "TV-14": "U/A 13+", "13+": "U/A 13+", "12+": "U/A 13+",
+    "16+": "U/A 16+", UA: "U/A",
+    R: "A", "TV-MA": "A", "NC-17": "A", X: "A", "18": "A", "18+": "A",
+  };
+  const certLabel = (cert) =>
+    cert ? (CERT_LABEL[cert.toUpperCase().replace(/\s+/g, "")] || cert) : "";
+
+  /* kid-friendly: family/animation content that isn't adult-rated */
+  const isKids = (t) =>
+    (t.genres.includes("Animation") || t.genres.includes("Family")) &&
+    ageBucket(t.cert) !== "a";
 
   const yearMatch = (t) => {
     const y = t.year, f = state.year;
@@ -111,7 +128,8 @@
           (state.type === "all" || t.type === state.type) &&
           (state.lang === "all" || t.lang === state.lang) &&
           (!state.minRating || t.rating >= state.minRating) &&
-          (state.age === "all" || ageBucket(t.cert) === state.age) &&
+          (state.age === "all" ||
+            (state.age === "kids" ? isKids(t) : ageBucket(t.cert) === state.age)) &&
           yearMatch(t) &&
           (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))));
     /* release-date key: full dates rank above bare years within the same year */
@@ -162,6 +180,7 @@
           <span>${t.year}</span><span class="dot">·</span>
           <span class="lang-tag">${langTag}</span>
           ${t.seasons ? `<span class="se-tag" title="${t.seasons} season${t.seasons > 1 ? "s" : ""}, ${t.episodes} episodes">${t.seasons}S · ${t.episodes}Ep</span>` : ""}
+          ${t.cert ? `<span class="se-tag" title="Age rating (${esc(t.cert)})">${esc(certLabel(t.cert))}</span>` : ""}
         </p>
         <p class="card-foot">
           <span class="card-genres">${t.genres.slice(0, 2).join(" / ")}</span>
@@ -233,7 +252,7 @@
     const y = p.get("year");
     if (y && [...$("#year-select").options].some((o) => o.value === y)) state.year = y;
     const s = p.get("sort"); if (["rating", "newest", "oldest", "az"].includes(s)) state.sort = s;
-    const a = p.get("age"); if (["u", "ua", "a"].includes(a)) state.age = a;
+    const a = p.get("age"); if (["kids", "u", "ua", "a"].includes(a)) state.age = a;
     const m = p.get("min");
     if (["0", "6", "7", "7.5", "8", "8.5", "9"].includes(m)) state.minRating = Number(m);
     const g = p.get("g");
@@ -348,7 +367,7 @@
       : String(t.year);
     $("#detail-meta").innerHTML =
       [`<span title="Release date">${relDate}</span>`, runtime && `<span>${runtime}</span>`,
-       t.cert && `<span class="cert-tag">${esc(t.cert)}</span>`]
+       t.cert && `<span class="cert-tag" title="${esc(t.cert)}">${esc(certLabel(t.cert))}</span>`]
         .filter(Boolean).join(`<span class="dot">·</span>`) +
       `<span class="detail-genres">${t.genres.map((g) => `<span class="chip is-active">${g}</span>`).join("")}</span>`;
     $("#detail-desc").textContent = t.desc || t.plot;

@@ -79,6 +79,12 @@ const queries = [
   // English: just the cream
   ["movie", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 500, "primary_release_date.gte": since, page: 1 }],
   ["tv", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 300, "first_air_date.gte": since, page: 1 }],
+  // Kids & family — 16=Animation, 10751=Family; these rarely surface in the
+  // popularity/rating sweeps above, so ask for them explicitly (all-time,
+  // not just recent, since family favourites are evergreen)
+  ...Array.from({ length: 2 }, (_, i) => ["movie", { with_genres: "16,10751", sort_by: "vote_count.desc", "vote_count.gte": 400, page: i + 1 }]),
+  ...Array.from({ length: 2 }, (_, i) => ["movie", { with_genres: "16,10751", with_original_language: "hi", sort_by: "popularity.desc", page: i + 1 }]),
+  ["tv", { with_genres: "16,10751", sort_by: "vote_count.desc", "vote_count.gte": 200, page: 1 }],
 ];
 
 const found = [];
