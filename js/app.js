@@ -130,6 +130,9 @@
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
+  /* analytics — no-op if GA is blocked or absent */
+  const ga = (...args) => { try { window.gtag && window.gtag(...args); } catch {} };
+
   const imdbURL = (t) => t.imdb
     ? `https://www.imdb.com/title/${t.imdb}/`
     : `https://www.imdb.com/find/?q=${encodeURIComponent(t.title + " " + t.year)}`;
@@ -370,6 +373,7 @@
     $("#detail-platform").textContent = t.platform;
     currentDetail = t;
     updateWatchedBtn(t);
+    ga("event", "view_title", { item_name: t.title, item_id: t.imdb || "", rating: t.rating, lang: t.lang });
     detailVeil.hidden = false;
     document.body.style.overflow = "hidden";
     $("#detail-close").focus({ preventScroll: true });
@@ -390,6 +394,7 @@
     const key = titleKey(currentDetail);
     const on = !watchedSet.has(key);
     on ? watchedSet.add(key) : watchedSet.delete(key);
+    ga("event", "mark_watched", { item_name: currentDetail.title, watched: on });
     updateWatchedBtn(currentDetail);
     renderGrid();
     renderForYou();
@@ -437,7 +442,8 @@
   const signinVeil = $("#signin-veil");
   let gsiLoaded = false;
 
-  const postAuth = (d) => {
+  const postAuth = (d, method = "email") => {
+    ga("event", "login", { method });
     user = d.user;
     watchedSet.clear();
     (d.watched || []).forEach((k) => watchedSet.add(k));
@@ -456,7 +462,7 @@
         body: JSON.stringify({ credential: resp.credential }),
       });
       if (!r.ok) throw new Error();
-      postAuth(await r.json());
+      postAuth(await r.json(), "google");
     } catch { alert("Sign-in failed — please try again."); }
   };
 
@@ -547,7 +553,7 @@
         return showAuthOk("If that account exists, a reset link is on its way — valid for 1 hour.");
       if (authMode === "change") return showAuthOk("Password changed ✓");
       if (authMode === "reset") history.replaceState({}, "", "/");
-      postAuth(d);
+      postAuth(d, authMode);
     } catch { showAuthError("network error — try again"); }
     finally { btn.disabled = false; }
   });
@@ -591,7 +597,13 @@
 
   /* open on card click / Enter — rating badge link is left alone */
   document.addEventListener("click", (e) => {
-    if (e.target.closest(".badge-rating")) { e.stopPropagation(); return; }
+    const badge = e.target.closest(".badge-rating");
+    if (badge) {
+      const c = badge.closest("[data-id]");
+      if (c) ga("event", "imdb_click", { item_name: TITLES[Number(c.dataset.id)]?.title || "" });
+      e.stopPropagation();
+      return;
+    }
     const card = e.target.closest(".card[data-id], .deck-card[data-id]");
     if (card) openDetail(TITLES[Number(card.dataset.id)]);
   });
@@ -664,7 +676,12 @@
       if (searching) window.scrollTo({ top: 0 });
       renderGrid();
     }, 120);
+    clearTimeout(gaQTimer);
+    gaQTimer = setTimeout(() => {
+      if (state.q) ga("event", "search", { search_term: state.q });
+    }, 1500);
   });
+  let gaQTimer;
 
   $("#search-clear").addEventListener("click", () => {
     const inp = $("#search-input");
@@ -732,6 +749,7 @@
     }
     renderGrid();
     $$(".top-link").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
+    ga("event", "select_content", { content_type: "preset", item_id: name });
     if (push && location.pathname !== PRESET_PATH[name])
       history.pushState({}, "", PRESET_PATH[name]);
     if (scroll) $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
