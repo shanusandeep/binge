@@ -42,4 +42,7 @@ jobs:
           git config user.email "actions@github.com"
           git add data/titles.js
           git diff --cached --quiet || git commit -m "chore: daily catalogue sync"
+          # the job runs ~1h — main may have moved; rebase our data commit on
+          # top (ours-vs-theirs: keep the freshly synced catalogue on conflict)
+          git pull --rebase -X theirs origin main
           git push

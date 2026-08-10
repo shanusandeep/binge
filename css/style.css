@@ -816,6 +816,11 @@ a.badge-rating:hover {
 }
 .auth-input::placeholder { color: var(--text-faint); }
 .auth-error { color: var(--chili); font-size: 0.85rem; font-weight: 600; }
+.auth-ok { color: var(--good); font-size: 0.85rem; font-weight: 600; }
+.auth-forgot-row { text-align: right; margin-top: -4px; }
+.auth-forgot-row .auth-link { font-size: 0.8rem; color: var(--text-dim); }
+.auth-forgot-row .auth-link:hover { color: var(--saffron); }
+.account-menu .btn-ghost { display: block; width: 100%; text-align: left; padding: 8px 4px; }
 .auth-submit { width: 100%; }
 .auth-switch { font-size: 0.85rem; color: var(--text-dim); text-align: center; }
 .auth-link {

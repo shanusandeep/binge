@@ -392,48 +392,99 @@
     } catch { alert("Sign-in failed — please try again."); }
   };
 
-  /* ---------- email / password auth ---------- */
+  /* ---------- email / password auth (login · signup · forgot · reset · change) ---------- */
   let authMode = "login";
+  let resetToken = null;
   const authError = $("#auth-error");
+  const authOk = $("#auth-ok");
+  const signinTitle = signinVeil.querySelector(".modal-title");
+
+  const AUTH_UI = {
+    login:  { title: "Sign in to Binge", submit: "Sign in", fields: ["email", "password"], switchTo: "signup", switchLabel: "New to Binge? ", switchBtn: "Create an account", forgot: true, google: true },
+    signup: { title: "Create your account", submit: "Create account", fields: ["name", "email", "password"], switchTo: "login", switchLabel: "Already have an account? ", switchBtn: "Sign in instead", google: true },
+    forgot: { title: "Reset your password", submit: "Send reset link", fields: ["email"], switchTo: "login", switchLabel: "Remembered it? ", switchBtn: "Sign in instead" },
+    reset:  { title: "Choose a new password", submit: "Set new password", fields: ["password"] },
+    change: { title: "Change password", submit: "Change password", fields: ["current", "password"] },
+  };
   const setAuthMode = (mode) => {
     authMode = mode;
-    $("#auth-name").hidden = mode === "login";
-    $("#auth-submit").textContent = mode === "login" ? "Sign in" : "Create account";
-    $("#auth-mode").textContent = mode === "login" ? "Create an account" : "Sign in instead";
+    const ui = AUTH_UI[mode];
+    signinTitle.textContent = ui.title;
+    $("#auth-name").hidden = !ui.fields.includes("name");
+    $("#auth-email").hidden = !ui.fields.includes("email");
+    $("#auth-current").hidden = !ui.fields.includes("current");
+    $("#auth-password").hidden = !ui.fields.includes("password");
+    $("#auth-password").placeholder =
+      mode === "reset" || mode === "change" ? "New password (8+ characters)" : "Password (8+ characters)";
     $("#auth-password").autocomplete = mode === "login" ? "current-password" : "new-password";
-    document.querySelector(".auth-switch").firstChild.textContent =
-      mode === "login" ? "New to Binge? " : "Already have an account? ";
+    $("#auth-submit").textContent = ui.submit;
+    $("#auth-forgot").parentElement.hidden = !ui.forgot;
+    const sw = document.querySelector(".auth-switch");
+    sw.hidden = !ui.switchTo;
+    if (ui.switchTo) {
+      sw.firstChild.textContent = ui.switchLabel;
+      $("#auth-mode").textContent = ui.switchBtn;
+      $("#auth-mode").dataset.to = ui.switchTo;
+    }
+    $("#gsi-button").parentElement === null || ($("#gsi-button").style.display = ui.google ? "" : "none");
+    document.querySelector(".auth-divider").style.display = ui.google ? "" : "none";
     authError.hidden = true;
+    authOk.hidden = true;
   };
-  $("#auth-mode").addEventListener("click", () =>
-    setAuthMode(authMode === "login" ? "signup" : "login"));
+  $("#auth-mode").addEventListener("click", () => setAuthMode($("#auth-mode").dataset.to || "login"));
+  $("#auth-forgot").addEventListener("click", () => setAuthMode("forgot"));
+  $("#btn-changepw").addEventListener("click", () => {
+    accountMenu.hidden = true;
+    signinVeil.hidden = false;
+    document.body.style.overflow = "hidden";
+    setAuthMode("change");
+  });
+
+  const showAuthError = (msg) => { authError.textContent = msg; authError.hidden = false; };
+  const showAuthOk = (msg) => { authOk.textContent = msg; authOk.hidden = false; };
 
   $("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     authError.hidden = true;
+    authOk.hidden = true;
+    const ui = AUTH_UI[authMode];
     const email = $("#auth-email").value.trim();
     const password = $("#auth-password").value;
     const name = $("#auth-name").value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showAuthError("enter a valid email");
-    if (password.length < 8) return showAuthError("password must be at least 8 characters");
+    if (ui.fields.includes("email") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return showAuthError("enter a valid email");
+    if (ui.fields.includes("password") && password.length < 8)
+      return showAuthError("password must be at least 8 characters");
     if (authMode === "signup" && !name) return showAuthError("enter your name");
     const btn = $("#auth-submit");
     btn.disabled = true;
     try {
-      const r = await fetch(`/api/auth/${authMode}`, {
+      const [url, body] = {
+        login:  ["/api/auth/login", { email, password }],
+        signup: ["/api/auth/signup", { name, email, password }],
+        forgot: ["/api/auth/forgot", { email }],
+        reset:  ["/api/auth/reset", { token: resetToken, password }],
+        change: ["/api/auth/change-password", { current: $("#auth-current").value, next: password }],
+      }[authMode];
+      const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authMode === "login" ? { email, password } : { name, email, password }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) return showAuthError(d.error || "something went wrong");
       $("#auth-password").value = "";
+      $("#auth-current").value = "";
+      if (authMode === "forgot")
+        return showAuthOk("If that account exists, a reset link is on its way — valid for 1 hour.");
+      if (authMode === "change") return showAuthOk("Password changed ✓");
+      if (authMode === "reset") history.replaceState({}, "", "/");
       postAuth(d);
     } catch { showAuthError("network error — try again"); }
     finally { btn.disabled = false; }
   });
-  const showAuthError = (msg) => { authError.textContent = msg; authError.hidden = false; };
   const openSignin = () => {
+    setAuthMode("login");
     signinVeil.hidden = false;
     document.body.style.overflow = "hidden";
     if (!gsiLoaded) {
@@ -707,6 +758,15 @@
   setTimeout(layoutFilters, 400); // re-check once metrics settle (webview quirk)
   const bootPreset = PATH_PRESET[location.pathname];
   if (bootPreset) applyPreset(bootPreset, { push: false, scroll: false });
+  /* password-reset deep link: /reset?token=… */
+  if (location.pathname === "/reset") {
+    resetToken = new URLSearchParams(location.search).get("token");
+    if (resetToken) {
+      signinVeil.hidden = false;
+      document.body.style.overflow = "hidden";
+      setAuthMode("reset");
+    } else history.replaceState({}, "", "/");
+  }
   if (!localStorage.getItem(LS_SEEN) && !favGenres.length) {
     setTimeout(openModal, 1400);
   }

@@ -30,6 +30,14 @@ db.exec(`
   );
 `);
 try { db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT"); } catch { /* exists */ }
+db.exec(`
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used INTEGER DEFAULT 0
+  );
+`);
 
 /* ---------- password hashing: scrypt + per-user salt ---------- */
 const hashPassword = (pw) => {
@@ -146,6 +154,69 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200,
         { user: { name: u.name, email: u.email, picture: u.picture }, watched: userWatched(u.id) },
         { "Set-Cookie": cookie(sign(u.id), 60 * 60 * 24 * 180) });
+    }
+
+    if (path === "/api/auth/forgot" && req.method === "POST") {
+      const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?";
+      if (rateLimited(ip)) return json(res, 429, { error: "too many attempts — try later" });
+      const { email } = await readBody(req);
+      const em = String(email || "").trim().toLowerCase();
+      const u = db.prepare("SELECT id, name, password_hash FROM users WHERE lower(email) = ?").get(em);
+      if (u?.password_hash) {
+        const token = crypto.randomBytes(32).toString("base64url");
+        const th = crypto.createHash("sha256").update(token).digest("hex");
+        db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
+          .run(th, u.id, Date.now() + 60 * 60_000);
+        const link = `${process.env.RESET_BASE_URL || "https://binge.shanuva.com"}/reset?token=${token}`;
+        if (process.env.RESEND_API_KEY) {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: process.env.MAIL_FROM || "Binge <onboarding@resend.dev>",
+              to: em,
+              subject: "Reset your Binge password",
+              html: `<p>Hi ${u.name || ""},</p><p><a href="${link}">Reset your Binge password</a> (link valid for 1 hour).</p><p>If you didn't ask for this, ignore this email.</p>`,
+            }),
+          }).catch((e) => console.error("resend failed", e));
+        } else {
+          // no mail provider configured — surface the link in server logs so
+          // the admin can pass it on manually:  docker logs binge-api
+          console.log(`[reset-link] ${em} → ${link}`);
+        }
+      }
+      /* same answer whether or not the account exists — no user enumeration */
+      return json(res, 200, { ok: true });
+    }
+
+    if (path === "/api/auth/reset" && req.method === "POST") {
+      const { token, password } = await readBody(req);
+      if (typeof password !== "string" || password.length < 8)
+        return json(res, 400, { error: "password must be at least 8 characters" });
+      const th = crypto.createHash("sha256").update(String(token || "")).digest("hex");
+      const row = db.prepare("SELECT user_id, expires_at, used FROM password_resets WHERE token_hash = ?").get(th);
+      if (!row || row.used || row.expires_at < Date.now())
+        return json(res, 400, { error: "reset link is invalid or expired — request a new one" });
+      db.prepare("UPDATE password_resets SET used = 1 WHERE token_hash = ?").run(th);
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(password), row.user_id);
+      const u = db.prepare("SELECT id, name, email, picture FROM users WHERE id = ?").get(row.user_id);
+      return json(res, 200,
+        { user: { name: u.name, email: u.email, picture: u.picture }, watched: userWatched(u.id) },
+        { "Set-Cookie": cookie(sign(u.id), 60 * 60 * 24 * 180) });
+    }
+
+    if (path === "/api/auth/change-password" && req.method === "POST") {
+      const cuid = verify(req.headers.cookie);
+      if (!cuid) return json(res, 401, { error: "not signed in" });
+      const { current, next } = await readBody(req);
+      if (typeof next !== "string" || next.length < 8)
+        return json(res, 400, { error: "new password must be at least 8 characters" });
+      const u = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(cuid);
+      if (!u?.password_hash) return json(res, 400, { error: "this account uses Google sign-in" });
+      if (!verifyPassword(String(current || ""), u.password_hash))
+        return json(res, 401, { error: "current password is wrong" });
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(next), cuid);
+      return json(res, 200, { ok: true });
     }
 
     if (path === "/api/logout" && req.method === "POST")
