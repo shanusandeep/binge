@@ -3,6 +3,8 @@
 :80 {
 	root * /srv/www
 	encode zstd gzip
+	# SPA routes (/recent, /all-time, …) all serve the app shell
+	try_files {path} /index.html
 	file_server
 
 	header -Server
@@ -10,14 +12,14 @@
 	# Mutually exclusive cache classes (Caddy header directives don't
 	# reliably override each other, so matchers must not overlap):
 	# HTML always revalidates — it carries the ?v= cache-bust versions.
-	@html path / /index.html
+	@html {
+		not path /css/* /js/* /data/* /assets/*
+	}
 	header @html Cache-Control "no-cache"
 	# The catalogue changes daily — cache briefly.
 	@data path /data/*
 	header @data Cache-Control "public, max-age=900"
-	# Everything else (css/js) is version-busted — cache for a day.
-	@assets {
-		not path / /index.html /data/*
-	}
+	# Version-busted css/js — cache for a day.
+	@assets path /css/* /js/* /assets/*
 	header @assets Cache-Control "public, max-age=86400"
 }

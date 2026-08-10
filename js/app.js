@@ -161,6 +161,16 @@
       `<b>${list.length}</b> title${list.length === 1 ? "" : "s"}` +
       (list.length ? ` · ${hi} Hindi / ${list.length - hi} English` : "");
     $("#btn-clear").hidden = !isFiltered();
+
+    /* mobile funnel badge + inline count */
+    const activeCount =
+      (state.type !== "all") + (state.lang !== "all") + (state.year !== "all") +
+      (state.age !== "all") + (state.minRating > 0) + (state.genres.size > 0);
+    const badge = $("#filter-count");
+    badge.hidden = !activeCount;
+    badge.textContent = activeCount;
+    $("#mobile-results").textContent =
+      `${list.length} title${list.length === 1 ? "" : "s"}`;
   };
 
   const isFiltered = () =>
@@ -364,6 +374,10 @@
     renderGrid();
   });
 
+  const resetRoute = () => {
+    if (PATH_PRESET?.[location.pathname]) history.pushState({}, "", "/");
+  };
+
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all";
     $("#age-select").value = "all";
@@ -378,11 +392,14 @@
     renderChips();
     renderGrid();
   };
-  $("#btn-clear").addEventListener("click", clearAll);
-  $("#btn-empty-clear").addEventListener("click", clearAll);
+  $("#btn-clear").addEventListener("click", () => { clearAll(); resetRoute(); });
+  $("#btn-empty-clear").addEventListener("click", () => { clearAll(); resetRoute(); });
 
-  /* ---------- quick-view presets (header links) ---------- */
-  const applyPreset = (name) => {
+  /* ---------- quick-view presets (header links) + routes ---------- */
+  const PRESET_PATH = { recent: "/recent", hits: "/all-time" };
+  const PATH_PRESET = { "/recent": "recent", "/all-time": "hits" };
+
+  const applyPreset = (name, { push = true, scroll = true } = {}) => {
     clearAll();
     if (name === "recent") {
       state.sort = "newest";
@@ -396,17 +413,30 @@
     }
     renderGrid();
     $$(".top-link").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
-    $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (push && location.pathname !== PRESET_PATH[name])
+      history.pushState({}, "", PRESET_PATH[name]);
+    if (scroll) $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
   };
   $$(".top-link").forEach((b) =>
     b.addEventListener("click", () => applyPreset(b.dataset.preset)));
+
+  const routeHome = (push) => {
+    clearAll();
+    if (push && location.pathname !== "/") history.pushState({}, "", "/");
+  };
+  window.addEventListener("popstate", () => {
+    const preset = PATH_PRESET[location.pathname];
+    preset ? applyPreset(preset, { push: false, scroll: false }) : routeHome(false);
+  });
 
   $("#btn-my-genres").addEventListener("click", openModal);
   $("#modal-skip").addEventListener("click", closeModal);
   modalVeil.addEventListener("click", (e) => { if (e.target === modalVeil) closeModal(); });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    const sheet = $("#sheet-veil");
     if (!detailVeil.hidden) closeDetail();
+    else if (sheet && !sheet.hidden) { sheet.hidden = true; document.body.style.overflow = ""; }
     else if (!modalVeil.hidden) closeModal();
   });
 
@@ -428,11 +458,52 @@
     forYouSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
+  /* ---------- mobile filter sheet ---------- */
+  const sheetVeil = $("#sheet-veil");
+  const sheetBody = $("#sheet-body");
+  const filterbar = $("#filterbar");
+  const rowTop = $(".filter-row-top");
+  const mobileRow = $("#mobile-filter-row");
+  const mqMobile = matchMedia("(max-width: 720px)");
+
+  const openSheet = () => { sheetVeil.hidden = false; document.body.style.overflow = "hidden"; };
+  const closeSheet = () => {
+    if (sheetVeil.hidden) return;
+    sheetVeil.hidden = true;
+    document.body.style.overflow = "";
+  };
+
+  /* the real filter controls MOVE between the bar and the sheet, so all
+     listeners and state stay intact — nothing is duplicated */
+  const layoutFilters = () => {
+    const mobile = mqMobile.matches;
+    mobileRow.hidden = !mobile;
+    if (mobile === sheetBody.contains(rowTop)) return; // already in place
+    if (mobile) {
+      sheetBody.append(rowTop, genreRow);
+    } else {
+      closeSheet();
+      filterbar.append(rowTop, genreRow);
+    }
+  };
+  mqMobile.addEventListener("change", layoutFilters);
+  window.addEventListener("resize", layoutFilters);
+  setInterval(layoutFilters, 1000); // belt & braces: some webviews fire neither event
+
+  $("#btn-filters").addEventListener("click", openSheet);
+  $("#sheet-apply").addEventListener("click", closeSheet);
+  $("#sheet-reset").addEventListener("click", () => { clearAll(); resetRoute(); });
+  sheetVeil.addEventListener("click", (e) => { if (e.target === sheetVeil) closeSheet(); });
+
   /* ---------- boot ---------- */
   renderHero();
   renderChips();
   renderForYou();
   renderGrid();
+  layoutFilters();
+  setTimeout(layoutFilters, 400); // re-check once metrics settle (webview quirk)
+  const bootPreset = PATH_PRESET[location.pathname];
+  if (bootPreset) applyPreset(bootPreset, { push: false, scroll: false });
   if (!localStorage.getItem(LS_SEEN) && !favGenres.length) {
     setTimeout(openModal, 1400);
   }
