@@ -124,10 +124,15 @@ for (const t of found) {
   const key = `${t.title.toLowerCase()}|${t.year}`;
   const prev = existing.get(key);
   if (prev) {
-    // refresh rating only when OMDb gives us a true IMDb score
     if (OMDB_KEY) {
+      // true IMDb score wins when available
       const r = await omdbRating(t);
       if (r && r !== prev.rating) { prev.rating = r; refreshed++; }
+    } else if (prev.platform === "Streaming" && t.rating && t.rating !== prev.rating) {
+      // TMDB-sourced entries: at least track TMDB's own drift
+      // (curated entries with named platforms keep their IMDb ratings)
+      prev.rating = t.rating;
+      refreshed++;
     }
     continue;
   }

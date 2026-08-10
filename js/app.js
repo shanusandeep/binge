@@ -98,16 +98,19 @@
   };
 
   const applyFilters = () => {
-    let list = TITLES.filter((t) =>
-      (state.type === "all" || t.type === state.type) &&
-      (state.lang === "all" || t.lang === state.lang) &&
-      (!state.minRating || t.rating >= state.minRating) &&
-      (state.age === "all" || ageBucket(t.cert) === state.age) &&
-      yearMatch(t) &&
-      (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))) &&
-      (state.q === "" || t.title.toLowerCase().includes(state.q) ||
-        (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
-    );
+    /* name search is a global lookup — never let filters hide the title
+       someone is explicitly searching for */
+    let list = state.q !== ""
+      ? TITLES.filter((t) =>
+          t.title.toLowerCase().includes(state.q) ||
+          (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
+      : TITLES.filter((t) =>
+          (state.type === "all" || t.type === state.type) &&
+          (state.lang === "all" || t.lang === state.lang) &&
+          (!state.minRating || t.rating >= state.minRating) &&
+          (state.age === "all" || ageBucket(t.cert) === state.age) &&
+          yearMatch(t) &&
+          (state.genres.size === 0 || t.genres.some((g) => state.genres.has(g))));
     /* release-date key: full dates rank above bare years within the same year */
     const rel = (t) => t.released || String(t.year);
     switch (state.sort) {
