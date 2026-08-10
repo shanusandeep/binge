@@ -102,10 +102,12 @@
       (state.q === "" || t.title.toLowerCase().includes(state.q) ||
         (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
     );
+    /* release-date key: full dates rank above bare years within the same year */
+    const rel = (t) => t.released || String(t.year);
     switch (state.sort) {
       case "rating": list.sort((a, b) => b.rating - a.rating || b.year - a.year); break;
-      case "newest": list.sort((a, b) => b.year - a.year || b.rating - a.rating); break;
-      case "oldest": list.sort((a, b) => a.year - b.year || b.rating - a.rating); break;
+      case "newest": list.sort((a, b) => rel(b).localeCompare(rel(a)) || b.rating - a.rating); break;
+      case "oldest": list.sort((a, b) => rel(a).localeCompare(rel(b)) || b.rating - a.rating); break;
       case "az": list.sort((a, b) => a.title.localeCompare(b.title)); break;
     }
     return list;
@@ -254,8 +256,11 @@
           ? `${Math.floor(t.runtime / 60)}h ${t.runtime % 60}m`
           : `~${t.runtime}m / episode`)
       : null;
+    const relDate = t.released
+      ? new Date(t.released + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+      : String(t.year);
     $("#detail-meta").innerHTML =
-      [`<span>${t.year}</span>`, runtime && `<span>${runtime}</span>`,
+      [`<span title="Release date">${relDate}</span>`, runtime && `<span>${runtime}</span>`,
        t.cert && `<span class="cert-tag">${esc(t.cert)}</span>`]
         .filter(Boolean).join(`<span class="dot">·</span>`) +
       `<span class="detail-genres">${t.genres.map((g) => `<span class="chip is-active">${g}</span>`).join("")}</span>`;
@@ -402,6 +407,12 @@
   const applyPreset = (name, { push = true, scroll = true } = {}) => {
     clearAll();
     if (name === "recent") {
+      /* this year's releases, newest first (falls back to all years early in Jan) */
+      const yr = String(new Date().getFullYear());
+      if ($(`#year-select option[value="${yr}"]`)) {
+        state.year = yr;
+        $("#year-select").value = yr;
+      }
       state.sort = "newest";
       $("#sort-select").value = "newest";
     } else { /* hits: the all-time greats */

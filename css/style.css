@@ -94,20 +94,25 @@ body {
 
 .header-actions { display: flex; align-items: center; gap: 12px; }
 
-/* quick-view links */
-.top-nav { display: flex; align-items: center; gap: 4px; margin-right: auto; margin-left: 26px; }
+/* quick-view links — styled as proper pill controls, not loose text */
+.top-nav { display: flex; align-items: center; gap: 8px; margin-right: auto; margin-left: 26px; }
 .top-link {
-  font-family: inherit; font-size: 0.9rem; font-weight: 700;
+  font-family: inherit; font-size: 0.88rem; font-weight: 700;
   color: var(--text-dim);
-  background: none; border: none;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   cursor: pointer;
-  transition: color 0.15s, background 0.2s;
+  transition: color 0.15s, background 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
-.top-link:hover { color: var(--text); background: var(--bg-3); }
-.top-link.is-active { color: var(--saffron); background: rgba(255, 180, 58, 0.12); }
+.top-link:hover { color: var(--text); border-color: var(--saffron-deep); }
+.top-link.is-active {
+  color: var(--saffron);
+  background: rgba(255, 180, 58, 0.12);
+  border-color: var(--saffron);
+}
 
 .search {
   display: flex; align-items: center; gap: 8px;

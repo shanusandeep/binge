@@ -96,6 +96,7 @@ for (const [kind, params] of queries) {
       genres: mapGenres(r.genre_ids || []),
       rating: Math.round(r.vote_average * 10) / 10,
       platform: "Streaming",
+      ...(date && { released: date }),
       plot: (r.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "Recently released — synopsis coming soon.",
       ...(r.poster_path && { poster: `https://image.tmdb.org/t/p/w500${r.poster_path}` }),
       ...(r.overview && { desc: r.overview.replace(/\s+/g, " ").trim().slice(0, 550) }),
@@ -150,9 +151,9 @@ const pickCert = (list) => {
   return null;
 };
 
-let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && t.cert && (t.type === "movie" || t.episodes)) continue;
+  if (t.poster && t.imdb && t.cert && t.released && (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
@@ -181,9 +182,13 @@ for (const t of existing.values()) {
       const cert = pickCert(cd.results || []);
       if (cert) { t.cert = cert.trim(); certFilled++; }
     }
+    if (!t.released) {
+      const rd = hit.release_date || hit.first_air_date;
+      if (rd) { t.released = rd; relFilled++; }
+    }
   } catch { /* leave as-is */ }
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates`);
 
 /* ---------- write ---------- */
 const titles = [...existing.values()].sort((a, b) =>
@@ -201,6 +206,7 @@ const entry = (t) => {
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
     ...(t.cert && { cert: t.cert }),
+    ...(t.released && { released: t.released }),
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
