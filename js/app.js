@@ -368,6 +368,18 @@
 
   const signinVeil = $("#signin-veil");
   let gsiLoaded = false;
+
+  const postAuth = (d) => {
+    user = d.user;
+    watchedSet.clear();
+    (d.watched || []).forEach((k) => watchedSet.add(k));
+    refreshAccount();
+    renderGrid();
+    renderForYou();
+    if (currentDetail) updateWatchedBtn(currentDetail);
+    closeSignin();
+  };
+
   const onCredential = async (resp) => {
     try {
       const r = await fetch("/api/auth/google", {
@@ -376,17 +388,51 @@
         body: JSON.stringify({ credential: resp.credential }),
       });
       if (!r.ok) throw new Error();
-      const d = await r.json();
-      user = d.user;
-      watchedSet.clear();
-      (d.watched || []).forEach((k) => watchedSet.add(k));
-      refreshAccount();
-      renderGrid();
-      renderForYou();
-      if (currentDetail) updateWatchedBtn(currentDetail);
-      closeSignin();
+      postAuth(await r.json());
     } catch { alert("Sign-in failed — please try again."); }
   };
+
+  /* ---------- email / password auth ---------- */
+  let authMode = "login";
+  const authError = $("#auth-error");
+  const setAuthMode = (mode) => {
+    authMode = mode;
+    $("#auth-name").hidden = mode === "login";
+    $("#auth-submit").textContent = mode === "login" ? "Sign in" : "Create account";
+    $("#auth-mode").textContent = mode === "login" ? "Create an account" : "Sign in instead";
+    $("#auth-password").autocomplete = mode === "login" ? "current-password" : "new-password";
+    document.querySelector(".auth-switch").firstChild.textContent =
+      mode === "login" ? "New to Binge? " : "Already have an account? ";
+    authError.hidden = true;
+  };
+  $("#auth-mode").addEventListener("click", () =>
+    setAuthMode(authMode === "login" ? "signup" : "login"));
+
+  $("#auth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    authError.hidden = true;
+    const email = $("#auth-email").value.trim();
+    const password = $("#auth-password").value;
+    const name = $("#auth-name").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showAuthError("enter a valid email");
+    if (password.length < 8) return showAuthError("password must be at least 8 characters");
+    if (authMode === "signup" && !name) return showAuthError("enter your name");
+    const btn = $("#auth-submit");
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/auth/${authMode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authMode === "login" ? { email, password } : { name, email, password }),
+      });
+      const d = await r.json();
+      if (!r.ok) return showAuthError(d.error || "something went wrong");
+      $("#auth-password").value = "";
+      postAuth(d);
+    } catch { showAuthError("network error — try again"); }
+    finally { btn.disabled = false; }
+  });
+  const showAuthError = (msg) => { authError.textContent = msg; authError.hidden = false; };
   const openSignin = () => {
     signinVeil.hidden = false;
     document.body.style.overflow = "hidden";

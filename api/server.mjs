@@ -29,6 +29,31 @@ db.exec(`
     PRIMARY KEY (user_id, title_key)
   );
 `);
+try { db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT"); } catch { /* exists */ }
+
+/* ---------- password hashing: scrypt + per-user salt ---------- */
+const hashPassword = (pw) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return `s2:${salt}:${crypto.scryptSync(pw, salt, 32).toString("hex")}`;
+};
+const verifyPassword = (pw, stored) => {
+  const [v, salt, hash] = (stored || "").split(":");
+  if (v !== "s2" || !salt || !hash) return false;
+  try {
+    return crypto.timingSafeEqual(crypto.scryptSync(pw, salt, 32), Buffer.from(hash, "hex"));
+  } catch { return false; }
+};
+
+/* ---------- crude per-IP rate limit for auth endpoints ---------- */
+const attempts = new Map();
+const rateLimited = (ip) => {
+  const now = Date.now();
+  const a = attempts.get(ip) || { n: 0, t: now };
+  if (now - a.t > 10 * 60_000) { a.n = 0; a.t = now; }
+  a.n++;
+  attempts.set(ip, a);
+  return a.n > 25;
+};
 
 /* ---------- session cookie: "<uid>.<hmac>" ---------- */
 const sign = (uid) =>
@@ -84,6 +109,43 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200,
         { user: { name: g.name, email: g.email, picture: g.picture }, watched: userWatched(uid) },
         { "Set-Cookie": cookie(sign(uid), 60 * 60 * 24 * 180) });
+    }
+
+    if (path === "/api/auth/signup" && req.method === "POST") {
+      const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?";
+      if (rateLimited(ip)) return json(res, 429, { error: "too many attempts — try later" });
+      const { name, email, password } = await readBody(req);
+      const em = String(email || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return json(res, 400, { error: "valid email required" });
+      if (typeof password !== "string" || password.length < 8)
+        return json(res, 400, { error: "password must be at least 8 characters" });
+      const nm = String(name || "").trim().slice(0, 80);
+      if (!nm) return json(res, 400, { error: "name required" });
+      const existing = db.prepare("SELECT id, password_hash FROM users WHERE lower(email) = ?").get(em);
+      if (existing)
+        return json(res, 409, { error: existing.password_hash
+          ? "account already exists — sign in instead"
+          : "this email uses Google sign-in" });
+      db.prepare("INSERT INTO users (sub, email, name, password_hash) VALUES (?, ?, ?, ?)")
+        .run("email:" + em, em, nm, hashPassword(password));
+      const uid = db.prepare("SELECT id FROM users WHERE sub = ?").get("email:" + em).id;
+      return json(res, 200, { user: { name: nm, email: em, picture: null }, watched: [] },
+        { "Set-Cookie": cookie(sign(uid), 60 * 60 * 24 * 180) });
+    }
+
+    if (path === "/api/auth/login" && req.method === "POST") {
+      const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?";
+      if (rateLimited(ip)) return json(res, 429, { error: "too many attempts — try later" });
+      const { email, password } = await readBody(req);
+      const em = String(email || "").trim().toLowerCase();
+      const u = db.prepare("SELECT id, name, email, picture, password_hash FROM users WHERE lower(email) = ?").get(em);
+      if (!u || !u.password_hash)
+        return json(res, 401, { error: u ? "this email uses Google sign-in" : "no account with that email" });
+      if (!verifyPassword(String(password || ""), u.password_hash))
+        return json(res, 401, { error: "wrong password" });
+      return json(res, 200,
+        { user: { name: u.name, email: u.email, picture: u.picture }, watched: userWatched(u.id) },
+        { "Set-Cookie": cookie(sign(u.id), 60 * 60 * 24 * 180) });
     }
 
     if (path === "/api/logout" && req.method === "POST")
