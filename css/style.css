@@ -1004,10 +1004,11 @@ body.is-searching .site-header { position: sticky; top: 0; }
 }
 
 @media (max-width: 560px) {
-  .site-header { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
-  /* quick links drop to their own row under the logo/search */
-  .top-nav { order: 3; width: 100%; margin: 2px 0 0; justify-content: center; }
-  .top-link { font-size: 0.82rem; padding: 6px 12px; }
+  .site-header { padding: 10px 14px; gap: 10px 8px; flex-wrap: wrap; }
+  /* row 1: brand left, quick links right · row 2: search + genres */
+  .top-nav { margin: 0 0 0 auto; }
+  .top-link { font-size: 0.8rem; padding: 6px 11px; }
+  .header-actions { order: 3; width: 100%; }
   .logo { gap: 7px; }
   .logo-word { font-size: 1.35rem; }
   .logo-mark svg { width: 21px; height: 21px; }
