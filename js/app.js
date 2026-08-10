@@ -173,6 +173,11 @@
       (list.length ? ` · ${hi} Hindi / ${list.length - hi} English` : "");
     $("#btn-clear").hidden = !isFiltered();
 
+    /* header 7+ toggle mirrors the min-rating filter */
+    const seven = $("#btn-seven");
+    seven.classList.toggle("is-on", state.minRating >= 7);
+    seven.setAttribute("aria-pressed", state.minRating >= 7);
+
     /* mobile funnel badge + inline count */
     const activeCount =
       (state.type !== "all") + (state.lang !== "all") + (state.year !== "all") +
@@ -553,8 +558,16 @@
       history.pushState({}, "", PRESET_PATH[name]);
     if (scroll) $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  $$(".top-link").forEach((b) =>
+  $$(".top-link[data-preset]").forEach((b) =>
     b.addEventListener("click", () => applyPreset(b.dataset.preset)));
+
+  /* header 7+ toggle: one tap to hide anything under IMDb 7 */
+  $("#btn-seven").addEventListener("click", () => {
+    state.minRating = state.minRating >= 7 ? 0 : 7;
+    $("#rating-select").value = String(state.minRating || 0);
+    $("#rating-select").classList.toggle("is-set", state.minRating > 0);
+    renderGrid();
+  });
 
   const routeHome = (push) => {
     clearAll();
