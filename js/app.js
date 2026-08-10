@@ -243,6 +243,7 @@
       state.q = q.toLowerCase();
       $("#search-input").value = q;
       document.body.classList.add("is-searching");
+      $("#search-clear").hidden = false;
     }
     /* reflect everything in the widgets */
     $$(".seg-btn[data-type]").forEach((b) => b.classList.toggle("is-active", b.dataset.type === state.type));
@@ -659,9 +660,20 @@
       // search mode: hide hero/rail so results sit right under the box
       const searching = state.q !== "";
       document.body.classList.toggle("is-searching", searching);
+      $("#search-clear").hidden = !searching;
       if (searching) window.scrollTo({ top: 0 });
       renderGrid();
     }, 120);
+  });
+
+  $("#search-clear").addEventListener("click", () => {
+    const inp = $("#search-input");
+    inp.value = "";
+    state.q = "";
+    document.body.classList.remove("is-searching");
+    $("#search-clear").hidden = true;
+    renderGrid();
+    inp.focus();
   });
 
   genreRow.addEventListener("click", (e) => {
@@ -684,6 +696,7 @@
     state.minRating = 0; state.q = ""; state.genres.clear();
     document.body.classList.remove("is-searching");
     $("#search-input").value = "";
+    $("#search-clear").hidden = true;
     $("#year-select").value = "all";
     $("#rating-select").value = "0";
     $("#rating-select").classList.remove("is-set");

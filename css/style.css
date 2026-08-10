@@ -141,6 +141,19 @@ body {
 }
 .search input::placeholder { color: var(--text-faint); }
 .search input::-webkit-search-cancel-button { display: none; }
+.search-clear {
+  display: grid; place-items: center;
+  width: 20px; height: 20px;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: color 0.15s, border-color 0.15s;
+}
+.search-clear:hover { color: var(--chili); border-color: var(--chili); }
 
 .btn-genres {
   font-family: inherit; font-size: 0.85rem; font-weight: 700;

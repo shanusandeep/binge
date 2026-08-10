@@ -29,8 +29,15 @@ const DB_FILE = path.join(ROOT, "data", "titles.js");
 const TMDB = "https://api.themoviedb.org/3";
 // TMDB's userbase is Western-skewed: Hindi web series get single-digit vote
 // counts even when hugely popular in India — so the floor must be language-
-// and type-aware or Indian series never make it in.
-const minVotes = (lang, kind) => (lang === "hi" ? (kind === "tv" ? 3 : 10) : 25);
+// and type-aware or Indian series never make it in. Brand-new Hindi releases
+// are even worse (IMDb can have 1.5K votes while TMDB has 2 — Operation
+// Safed Sagar case), so anything under ~45 days old needs just one vote;
+// the IMDb-dataset step replaces the unreliable early rating anyway.
+const minVotes = (lang, kind, date) => {
+  const days = date ? (Date.now() - new Date(date).getTime()) / 864e5 : 999;
+  if (lang === "hi" && days <= 45) return 1;
+  return lang === "hi" ? (kind === "tv" ? 3 : 10) : 25;
+};
 const LOOKBACK_DAYS = 400;     // how far back "latest" reaches
 const PAGES = 3;               // TMDB pages per discover query
 
@@ -82,7 +89,7 @@ for (const [kind, params] of queries) {
     const date = r.release_date || r.first_air_date || "";
     const year = Number(date.slice(0, 4));
     const lang = r.original_language === "hi" ? "hi" : "en";
-    if (!title || !year || r.vote_count < minVotes(lang, kind)) continue;
+    if (!title || !year || r.vote_count < minVotes(lang, kind, date)) continue;
     let imdb = null;
     try {
       const ext = await tmdb(`/${kind}/${r.id}/external_ids`);
