@@ -25,6 +25,24 @@ services:
       retries: 3
       start_period: 5s
 
+  api:
+    build:
+      context: ./api
+    image: binge-api:latest
+    container_name: binge-api
+    restart: unless-stopped
+    networks: [edge]
+    env_file:
+      - ../.env            # /srv/binge/.env — SESSION_SECRET lives here
+    volumes:
+      - ../data:/data      # /srv/binge/data — sqlite persistence
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
 networks:
   edge:
     external: true

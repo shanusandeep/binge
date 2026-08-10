@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=15" />
+  <link rel="stylesheet" href="css/style.css?v=16" />
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -34,6 +34,13 @@
       <button class="btn-genres" id="btn-my-genres">
         <span aria-hidden="true">✦</span> My Genres
       </button>
+      <div class="account-wrap">
+        <button class="btn-account" id="btn-account">Sign in</button>
+        <div class="account-menu" id="account-menu" hidden>
+          <p class="account-name" id="account-name"></p>
+          <button class="btn-ghost" id="btn-signout">Sign out</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -154,6 +161,20 @@
     </div>
   </div>
 
+  <!-- ================= SIGN-IN MODAL ================= -->
+  <div class="modal-veil" id="signin-veil" hidden>
+    <div class="modal modal-signin" role="dialog" aria-modal="true" aria-label="Sign in">
+      <p class="modal-kicker">✦ Your watchlist</p>
+      <h3 class="modal-title">Sign in to Binge</h3>
+      <p class="modal-sub">Mark titles as watched and they'll drop out of your
+        recommendations — synced across your devices.</p>
+      <div class="gsi-holder" id="gsi-button"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="signin-close">Not now</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= MOBILE FILTER SHEET ================= -->
   <div class="sheet-veil" id="sheet-veil" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-label="Filters">
@@ -183,6 +204,7 @@
             <b>IMDb</b> <span id="detail-imdb-rating"></span> ↗
           </a>
           <a class="btn-watch" id="detail-watch" href="#" target="_blank" rel="noopener" hidden>▶ Watch on YouTube</a>
+          <button class="btn-watched" id="detail-watched">✓ Mark watched</button>
           <span class="card-platform" id="detail-platform"></span>
         </div>
       </div>
@@ -190,6 +212,6 @@
   </div>
 
   <script src="data/titles.js?v=11"></script>
-  <script src="js/app.js?v=14"></script>
+  <script src="js/app.js?v=15"></script>
 </body>
 </html>

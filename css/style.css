@@ -717,6 +717,73 @@ a.badge-rating:hover {
 .btn-solid:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-solid:not(:disabled):hover { background: #ffc35e; }
 
+/* ---------- account & watched ---------- */
+.account-wrap { position: relative; }
+.btn-account {
+  font-family: inherit; font-size: 0.85rem; font-weight: 700;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.2s;
+}
+.btn-account:hover { border-color: var(--saffron-deep); }
+.btn-account.is-user { padding: 3px; border-radius: 50%; }
+.btn-account .avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: block;
+}
+.account-menu {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 70;
+  min-width: 200px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.9);
+}
+.account-name {
+  font-size: 0.85rem; font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.btn-watched {
+  font-family: inherit; font-size: 0.88rem; font-weight: 700;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.btn-watched:hover { border-color: var(--good); color: var(--good); }
+.btn-watched.is-on {
+  color: #0f1a0c;
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.card.is-watched .poster-img { filter: grayscale(0.85) brightness(0.5); }
+.card.is-watched .poster::before { filter: grayscale(0.6) brightness(0.6); }
+.watched-badge {
+  position: absolute; bottom: 12px; right: 12px;
+  font-size: 0.66rem; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0f1a0c;
+  background: var(--good);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.gsi-holder { display: grid; place-items: center; min-height: 60px; margin-bottom: 20px; }
+
 /* ---------- mobile filter sheet ---------- */
 .btn-filters {
   display: inline-flex; align-items: center; gap: 8px;
@@ -964,7 +1031,7 @@ body.is-searching .site-header { position: sticky; top: 0; }
     margin: 8px 0 24px;
   }
   .detail-body { overflow: visible; }
-  .detail-media { min-height: 230px; max-height: 260px; }
+  .detail-media { min-height: 260px; max-height: 320px; }
   .detail-media::after {
     background: linear-gradient(180deg, transparent 40%, var(--bg-2) 100%);
   }

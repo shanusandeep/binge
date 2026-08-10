@@ -39,6 +39,12 @@
   const modalGenres = $("#modal-genres");
   const modalSave = $("#modal-save");
 
+  /* ---------- account & watched ---------- */
+  const GOOGLE_CLIENT_ID = "379841086954-8kkvbj33cbri67e2fldki07tldk61arq.apps.googleusercontent.com";
+  let user = null;
+  const watchedSet = new Set();
+  const titleKey = (t) => t.imdb || t.title.toLowerCase().replace(/[^a-z0-9]+/g, "") + "|" + t.year;
+
   /* ---------- personalisation ---------- */
   const loadFavs = () => {
     try { return JSON.parse(localStorage.getItem(LS_GENRES)) || []; }
@@ -130,13 +136,15 @@
     const img = t.poster
       ? `<img class="poster-img" src="${esc(t.poster)}" alt="" loading="lazy" onerror="this.remove();this.closest('.poster').classList.remove('has-img')">`
       : "";
+    const isWatched = watchedSet.has(titleKey(t));
     return `
-    <article class="card" style="animation-delay:${Math.min(i * 40, 400)}ms" data-id="${t._id}" tabindex="0" role="button" aria-label="${esc(t.title)} — details">
+    <article class="card ${isWatched ? "is-watched" : ""}" style="animation-delay:${Math.min(i * 40, 400)}ms" data-id="${t._id}" tabindex="0" role="button" aria-label="${esc(t.title)} — details">
       <div class="poster ${t.poster ? "has-img" : ""}" style="--poster-bg:${posterBg(t).replace(/\n\s*/g, " ")}">
         ${img}
         <span class="poster-glyph" aria-hidden="true">${glyph}</span>
         <a class="badge-rating" href="${imdbURL(t)}" target="_blank" rel="noopener" title="Open on IMDb" aria-label="IMDb rating ${t.rating.toFixed(1)} — open on IMDb">${IMDB_SVG}${t.rating.toFixed(1)}</a>
         ${topBadge}
+        ${isWatched ? `<span class="watched-badge">✓ Watched</span>` : ""}
         <h3 class="poster-word">${esc(t.title)}</h3>
       </div>
       <div class="card-body">
@@ -192,7 +200,8 @@
   const renderForYou = () => {
     if (!favGenres.length) { forYouSection.hidden = true; return; }
     const picks = TITLES
-      .filter((t) => t.rating >= 7.3 && t.genres.some((g) => favGenres.includes(g)))
+      .filter((t) => t.rating >= 7.3 && !watchedSet.has(titleKey(t)) &&
+        t.genres.some((g) => favGenres.includes(g)))
       .sort((a, b) =>
         b.genres.filter((g) => favGenres.includes(g)).length -
         a.genres.filter((g) => favGenres.includes(g)).length ||
@@ -242,7 +251,8 @@
   const openDetail = (t) => {
     const media = $("#detail-media");
     if (t.poster) {
-      media.style.background = `url("${t.poster}") center / cover no-repeat, ${posterBg(t).replace(/\n\s*/g, " ")}`;
+      /* posters carry faces in the upper half — anchor there, not center */
+      media.style.background = `url("${t.poster}") top center / cover no-repeat, ${posterBg(t).replace(/\n\s*/g, " ")}`;
       media.innerHTML = "";
     } else {
       media.style.background = posterBg(t).replace(/\n\s*/g, " ");
@@ -285,10 +295,124 @@
     link.href = imdbURL(t);
     $("#detail-imdb-rating").textContent = t.rating.toFixed(1) + " / 10";
     $("#detail-platform").textContent = t.platform;
+    currentDetail = t;
+    updateWatchedBtn(t);
     detailVeil.hidden = false;
     document.body.style.overflow = "hidden";
     $("#detail-close").focus({ preventScroll: true });
   };
+
+  /* ---------- watched toggle + sign-in ---------- */
+  let currentDetail = null;
+  const updateWatchedBtn = (t) => {
+    const b = $("#detail-watched");
+    const on = watchedSet.has(titleKey(t));
+    b.textContent = on ? "✓ Watched" : "✓ Mark watched";
+    b.classList.toggle("is-on", on);
+  };
+
+  $("#detail-watched").addEventListener("click", async () => {
+    if (!currentDetail) return;
+    if (!user) { openSignin(); return; }
+    const key = titleKey(currentDetail);
+    const on = !watchedSet.has(key);
+    on ? watchedSet.add(key) : watchedSet.delete(key);
+    updateWatchedBtn(currentDetail);
+    renderGrid();
+    renderForYou();
+    try {
+      await fetch("/api/watched", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, watched: on }),
+      });
+    } catch { /* offline — local state still applied */ }
+  });
+
+  const accountBtn = $("#btn-account");
+  const accountMenu = $("#account-menu");
+  const refreshAccount = () => {
+    if (user) {
+      accountBtn.innerHTML = user.picture
+        ? `<img class="avatar" src="${esc(user.picture)}" alt="${esc(user.name || "account")}">`
+        : esc((user.name || "Account").split(" ")[0]);
+      accountBtn.classList.add("is-user");
+      $("#account-name").textContent = user.name || user.email || "";
+    } else {
+      accountBtn.textContent = "Sign in";
+      accountBtn.classList.remove("is-user");
+      accountMenu.hidden = true;
+    }
+  };
+  accountBtn.addEventListener("click", () => {
+    if (!user) openSignin();
+    else accountMenu.hidden = !accountMenu.hidden;
+  });
+  $("#btn-signout").addEventListener("click", async () => {
+    try { await fetch("/api/logout", { method: "POST" }); } catch {}
+    user = null;
+    watchedSet.clear();
+    refreshAccount();
+    renderGrid();
+    renderForYou();
+    if (currentDetail) updateWatchedBtn(currentDetail);
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".account-wrap")) accountMenu.hidden = true;
+  });
+
+  const signinVeil = $("#signin-veil");
+  let gsiLoaded = false;
+  const onCredential = async (resp) => {
+    try {
+      const r = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: resp.credential }),
+      });
+      if (!r.ok) throw new Error();
+      const d = await r.json();
+      user = d.user;
+      watchedSet.clear();
+      (d.watched || []).forEach((k) => watchedSet.add(k));
+      refreshAccount();
+      renderGrid();
+      renderForYou();
+      if (currentDetail) updateWatchedBtn(currentDetail);
+      closeSignin();
+    } catch { alert("Sign-in failed — please try again."); }
+  };
+  const openSignin = () => {
+    signinVeil.hidden = false;
+    document.body.style.overflow = "hidden";
+    if (!gsiLoaded) {
+      gsiLoaded = true;
+      const s = document.createElement("script");
+      s.src = "https://accounts.google.com/gsi/client";
+      s.onload = () => {
+        window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCredential });
+        window.google.accounts.id.renderButton($("#gsi-button"),
+          { theme: "filled_black", size: "large", width: 280, text: "signin_with" });
+      };
+      document.head.append(s);
+    }
+  };
+  const closeSignin = () => { signinVeil.hidden = true; document.body.style.overflow = ""; };
+  $("#signin-close").addEventListener("click", closeSignin);
+  signinVeil.addEventListener("click", (e) => { if (e.target === signinVeil) closeSignin(); });
+
+  /* restore session on load */
+  fetch("/api/me")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d) return;
+      user = d.user;
+      (d.watched || []).forEach((k) => watchedSet.add(k));
+      refreshAccount();
+      renderGrid();
+      renderForYou();
+    })
+    .catch(() => { /* api offline (local dev) — feature simply idle */ });
 
   const closeDetail = () => {
     detailVeil.hidden = true;
@@ -448,6 +572,7 @@
     if (e.key !== "Escape") return;
     const sheet = $("#sheet-veil");
     if (!detailVeil.hidden) closeDetail();
+    else if (!signinVeil.hidden) closeSignin();
     else if (sheet && !sheet.hidden) { sheet.hidden = true; document.body.style.overflow = ""; }
     else if (!modalVeil.hidden) closeModal();
   });

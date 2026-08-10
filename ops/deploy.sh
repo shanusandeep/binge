@@ -33,11 +33,11 @@ fi
 
 # ---- Stage 2 (fresh copy of the script) ----
 
-info "building image"
-sudo docker compose -f docker-compose.prod.yml build --pull app
+info "building images"
+sudo docker compose -f docker-compose.prod.yml build --pull
 
 info "starting"
-sudo docker compose -f docker-compose.prod.yml up -d app
+sudo docker compose -f docker-compose.prod.yml up -d
 
 info "waiting for health check"
 for i in $(seq 1 20); do
