@@ -5,6 +5,9 @@
 (function () {
   "use strict";
 
+  /* snapshot the incoming URL before any render can rewrite it */
+  const BOOT_PARAMS = new URLSearchParams(location.search);
+
   const DB = window.BINGE_DB || { titles: [], syncedAt: "" };
   const TITLES = DB.titles.map((t, i) => ({ ...t, _id: i }));
 
@@ -175,6 +178,13 @@
       `<b>${list.length}</b> title${list.length === 1 ? "" : "s"}` +
       (list.length ? ` · ${hi} Hindi / ${list.length - hi} English` : "");
     $("#btn-clear").hidden = !isFiltered();
+    /* focused mode: filters/preset active → hide hero & rail, results on top.
+       The 7+ toggle's two home states (on=7 / off=0) don't count as focus. */
+    document.body.classList.toggle("is-focused",
+      state.type !== "all" || state.lang !== "all" || state.year !== "all" ||
+      state.age !== "all" || state.genres.size > 0 || state.q !== "" ||
+      ![0, 7].includes(state.minRating));
+    syncURL();
 
     /* header 7+ toggle mirrors the min-rating filter */
     const seven = $("#btn-seven");
@@ -190,6 +200,60 @@
     badge.textContent = activeCount;
     $("#mobile-results").textContent =
       `${list.length} title${list.length === 1 ? "" : "s"}`;
+  };
+
+  /* ---------- shareable filter URLs ---------- */
+  /* the current filters live in the query string, so any view can be sent
+     to someone and it loads identically (defaults are omitted) */
+  const syncURL = () => {
+    if (location.pathname === "/reset") return; // never clobber a reset token
+    const p = new URLSearchParams();
+    if (state.type !== "all") p.set("type", state.type);
+    if (state.lang !== "all") p.set("lang", state.lang);
+    if (state.year !== "all") p.set("year", state.year);
+    if (state.sort !== "rating") p.set("sort", state.sort);
+    if (state.age !== "all") p.set("age", state.age);
+    if (state.minRating !== 7) p.set("min", String(state.minRating));
+    if (state.genres.size) p.set("g", [...state.genres].join(","));
+    if (state.q) p.set("q", state.q);
+    const qs = p.toString();
+    const url = location.pathname + (qs ? "?" + qs : "");
+    if (url !== location.pathname + location.search) history.replaceState({}, "", url);
+  };
+
+  const applyParams = () => {
+    if (location.pathname === "/reset") return;
+    const p = BOOT_PARAMS;
+    if (![...p.keys()].length) return;
+    const t = p.get("type"); if (["movie", "series"].includes(t)) state.type = t;
+    const l = p.get("lang"); if (["hi", "en"].includes(l)) state.lang = l;
+    const y = p.get("year");
+    if (y && [...$("#year-select").options].some((o) => o.value === y)) state.year = y;
+    const s = p.get("sort"); if (["rating", "newest", "oldest", "az"].includes(s)) state.sort = s;
+    const a = p.get("age"); if (["u", "ua", "a"].includes(a)) state.age = a;
+    const m = p.get("min");
+    if (["0", "6", "7", "7.5", "8", "8.5", "9"].includes(m)) state.minRating = Number(m);
+    const g = p.get("g");
+    if (g) {
+      const gs = g.split(",").filter((x) => allGenres.includes(x));
+      if (gs.length) state.genres = new Set(gs);
+    }
+    const q = p.get("q");
+    if (q) {
+      state.q = q.toLowerCase();
+      $("#search-input").value = q;
+      document.body.classList.add("is-searching");
+    }
+    /* reflect everything in the widgets */
+    $$(".seg-btn[data-type]").forEach((b) => b.classList.toggle("is-active", b.dataset.type === state.type));
+    $$(".seg-btn[data-lang]").forEach((b) => b.classList.toggle("is-active", b.dataset.lang === state.lang));
+    $("#year-select").value = state.year;
+    $("#sort-select").value = state.sort;
+    $("#age-select").value = state.age;
+    $("#rating-select").value = String(state.minRating || 0);
+    $("#rating-select").classList.toggle("is-set", state.minRating > 0);
+    renderChips();
+    renderGrid();
   };
 
   const isFiltered = () =>
@@ -761,6 +825,7 @@
   setTimeout(layoutFilters, 400); // re-check once metrics settle (webview quirk)
   const bootPreset = PATH_PRESET[location.pathname];
   if (bootPreset) applyPreset(bootPreset, { push: false, scroll: false });
+  applyParams(); // shared-URL filters layer on top of any preset defaults
   /* password-reset deep link: /reset?token=… */
   if (location.pathname === "/reset") {
     resetToken = new URLSearchParams(location.search).get("token");

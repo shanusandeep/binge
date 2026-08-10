@@ -906,11 +906,11 @@ a.badge-rating:hover {
 }
 .sheet-actions .btn-solid { flex: 1; max-width: 220px; }
 
-/* ---------- search mode: results only ---------- */
-body.is-searching .hero,
-body.is-searching .foryou { display: none; }
-body.is-searching .filterbar { margin-top: 0; }
-body.is-searching .site-header { position: sticky; top: 0; }
+/* ---------- search / focused mode: results only ---------- */
+body.is-searching .hero, body.is-focused .hero,
+body.is-searching .foryou, body.is-focused .foryou { display: none; }
+body.is-searching .filterbar, body.is-focused .filterbar { margin-top: 0; }
+body.is-searching .site-header, body.is-focused .site-header { position: sticky; top: 0; }
 
 /* ---------- title detail popup ---------- */
 .detail-veil[hidden] { display: none; }
