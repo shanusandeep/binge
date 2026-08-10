@@ -545,6 +545,7 @@
       }
       state.sort = "newest";
       $("#sort-select").value = "newest";
+      applyDefaultRating(); // site default: quality bar stays on
     } else { /* hits: the all-time greats */
       state.sort = "rating";
       $("#sort-select").value = "rating";
@@ -646,6 +647,12 @@
   sheetVeil.addEventListener("click", (e) => { if (e.target === sheetVeil) closeSheet(); });
 
   /* ---------- boot ---------- */
+  const applyDefaultRating = () => {
+    state.minRating = 7;
+    $("#rating-select").value = "7";
+    $("#rating-select").classList.add("is-set");
+  };
+  applyDefaultRating(); // 7+ is the site default — Clear ✕ removes it
   renderHero();
   renderChips();
   renderForYou();
