@@ -186,7 +186,8 @@ const pickCert = (list) => {
 
 let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && t.cert && t.released && t.platform !== "Streaming" &&
+  if (t.poster && t.imdb && t.cert && t.released &&
+      !["Streaming", "Theatres"].includes(t.platform) && // re-check until OTT arrival
       (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
@@ -220,9 +221,10 @@ for (const t of existing.values()) {
       const rd = hit.release_date || hit.first_air_date;
       if (rd) { t.released = rd; relFilled++; }
     }
-    if (t.platform === "Streaming") {
+    if (["Streaming", "Theatres"].includes(t.platform)) {
       const plat = await indianPlatform(kind, hit.id);
       if (plat) { t.platform = plat; platFilled++; }
+      else if (t.type === "movie" && t.platform === "Streaming") t.platform = "Theatres";
     }
   } catch { /* leave as-is */ }
 }
