@@ -62,7 +62,7 @@ Put your `GEMINI_API_KEY` in `.env` (see the template — it is gitignored on pu
 
 ### Automatic daily sync
 
-Push this repo to GitHub, then add `TMDB_API_KEY` and `GEMINI_API_KEY` (and optionally `OMDB_API_KEY`) under **Settings → Secrets and variables → Actions**. The included workflow ([.github/workflows/sync.yml](.github/workflows/sync.yml)) syncs daily at 08:00 IST, enriches any new titles, and commits the updated catalogue — your host redeploys automatically.
+Push this repo to GitHub, then add `TMDB_API_KEY` and `GEMINI_API_KEY` (and optionally `OMDB_API_KEY`) under **Settings → Secrets and variables → Actions**. The included workflow ([.github/workflows/sync.yml](.github/workflows/sync.yml)) syncs daily at 07:00 IST, enriches any new titles, and commits the updated catalogue — your host redeploys automatically.
 
 ## Deploying to binge.shanuva.com
 

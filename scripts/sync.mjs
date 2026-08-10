@@ -153,6 +153,26 @@ for (const t of found) {
   added++;
 }
 
+/* ---------- streaming platform (India) via TMDB watch providers ---------- */
+const PROVIDER_NORMALISE = {
+  "Amazon Prime Video": "Prime Video", "Amazon Video": "Prime Video",
+  "Netflix basic with Ads": "Netflix",
+  "Hotstar": "JioHotstar", "Disney Plus Hotstar": "JioHotstar",
+  "JioCinema": "JioHotstar", "Jio Cinema": "JioHotstar",
+  "Sony Liv": "SonyLIV", "Zee5": "ZEE5",
+  "Amazon miniTV": "Amazon MX Player", "MX Player": "Amazon MX Player",
+  "Apple TV Plus": "Apple TV+", "Apple TV": "Apple TV+",
+};
+const indianPlatform = async (kind, id) => {
+  try {
+    const d = await tmdb(`/${kind}/${id}/watch/providers`);
+    const region = d.results?.IN || d.results?.US;
+    const p = region?.flatrate?.[0] || region?.ads?.[0] || region?.free?.[0];
+    if (!p?.provider_name) return null;
+    return PROVIDER_NORMALISE[p.provider_name] || p.provider_name;
+  } catch { return null; }
+};
+
 /* ---------- backfill: posters, IMDb ids, episodes, certifications ---------- */
 /* prefer the Indian CBFC certificate, fall back to US/GB */
 const pickCert = (list) => {
@@ -164,9 +184,10 @@ const pickCert = (list) => {
   return null;
 };
 
-let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && t.cert && t.released && (t.type === "movie" || t.episodes)) continue;
+  if (t.poster && t.imdb && t.cert && t.released && t.platform !== "Streaming" &&
+      (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
@@ -199,9 +220,13 @@ for (const t of existing.values()) {
       const rd = hit.release_date || hit.first_air_date;
       if (rd) { t.released = rd; relFilled++; }
     }
+    if (t.platform === "Streaming") {
+      const plat = await indianPlatform(kind, hit.id);
+      if (plat) { t.platform = plat; platFilled++; }
+    }
   } catch { /* leave as-is */ }
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} platforms`);
 
 /* ---------- true IMDb ratings from IMDb's official daily dataset ----------
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
