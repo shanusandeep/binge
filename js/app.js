@@ -285,6 +285,15 @@
 
   /* ---------- render: genre chips ---------- */
   const renderChips = () => {
+    /* dropdown label reflects the selection */
+    const picked = [...state.genres];
+    const label = $("#genre-label");
+    if (label) {
+      label.textContent = picked.length === 0 ? "All genres"
+        : picked.length === 1 ? picked[0]
+        : `${picked.length} genres`;
+      $("#genre-toggle").classList.toggle("is-set", picked.length > 0);
+    }
     genreRow.innerHTML = allGenres.map((g) => `
       <button class="chip ${state.genres.has(g) ? "is-active" : ""}" data-genre="${g}">
         ${g}${favGenres.includes(g) ? `<span class="chip-heart">♥</span>` : ""}
@@ -725,6 +734,22 @@
     if (PATH_PRESET?.[location.pathname]) history.pushState({}, "", "/");
   };
 
+  /* ---------- genre dropdown ---------- */
+  const genreToggle = $("#genre-toggle");
+  const closeGenres = () => {
+    genreRow.hidden = true;
+    genreToggle.setAttribute("aria-expanded", "false");
+  };
+  genreToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = genreRow.hidden;
+    genreRow.hidden = !open;
+    genreToggle.setAttribute("aria-expanded", String(open));
+  });
+  genreRow.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", () => closeGenres());
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeGenres(); });
+
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all";
     $("#age-select").value = "all";
@@ -845,10 +870,10 @@
     mobileRow.hidden = !mobile;
     if (mobile === sheetBody.contains(rowTop)) return; // already in place
     if (mobile) {
-      sheetBody.append(rowTop, genreRow);
+      sheetBody.append(rowTop);
     } else {
       closeSheet();
-      filterbar.append(rowTop, genreRow);
+      filterbar.append(rowTop);
     }
   };
   mqMobile.addEventListener("change", layoutFilters);

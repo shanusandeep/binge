@@ -351,6 +351,7 @@ body {
   padding: 14px clamp(16px, 4vw, 48px) 0;
   margin-top: clamp(36px, 5vw, 60px);
 }
+.filter-row[hidden] { display: none; } /* must beat the flex rule below */
 .filter-row {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   max-width: 1400px; margin: 0 auto;
@@ -448,14 +449,38 @@ body {
 }
 .btn-clear:hover { background: rgba(232, 80, 58, 0.12); }
 
-/* genre chips */
-.genre-row {
-  overflow-x: auto;
-  flex-wrap: nowrap;
-  padding: 2px 0 14px;
-  scrollbar-width: none;
+/* genre multi-select dropdown */
+.genre-wrap { position: relative; }
+.genre-toggle { padding-right: 32px; }
+.genre-toggle.is-set {
+  background-color: rgba(255, 180, 58, 0.14);
+  border-color: var(--saffron);
+  color: var(--saffron);
 }
-.genre-row::-webkit-scrollbar { display: none; }
+.genre-panel[hidden] { display: none; }
+.genre-panel {
+  position: absolute; z-index: 60;
+  top: calc(100% + 8px); left: 0;
+  width: max(260px, 100%);
+  max-height: 320px; overflow-y: auto;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 28px 60px -22px rgba(0, 0, 0, 0.9);
+  scrollbar-width: thin;
+}
+/* inside the mobile sheet it expands inline instead of floating */
+.sheet-body .genre-panel {
+  position: static;
+  width: 100%;
+  max-height: none;
+  box-shadow: none;
+  padding: 12px 0 0;
+  border: none;
+}
+.sheet-body .genre-wrap { flex: 1 1 100%; }
 .chip {
   flex: 0 0 auto;
   font-family: inherit; font-size: 0.82rem; font-weight: 600;
@@ -1111,8 +1136,7 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
 
   /* the filter rows live in the bottom sheet on mobile — hide them in the
      bar itself (they are moved by JS; this also prevents a pre-JS flash) */
-  .filterbar > .filter-row-top,
-  .filterbar > .genre-row { display: none; }
+  .filterbar > .filter-row-top { display: none; }
 
   /* filters collapse to two slim horizontally-scrollable rows */
   .filter-row-top {
@@ -1123,7 +1147,7 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
   }
   .filter-row-top::-webkit-scrollbar { display: none; }
   /* fade hints that the row scrolls sideways */
-  .filter-row-top, .genre-row {
+  .filter-row-top {
     -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
     mask-image: linear-gradient(90deg, #000 92%, transparent);
   }

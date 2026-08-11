@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=21" />
+  <link rel="stylesheet" href="css/style.css?v=22" />
   <!-- Google Analytics (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-M83077SW5W"></script>
   <script>
@@ -122,7 +122,7 @@
       </select>
       <select class="select" id="age-select" aria-label="Age rating">
         <option value="all">All ages</option>
-        <option value="kids">Kids · Animation &amp; Family</option>
+        <option value="kids">Kids &amp; Family</option>
         <option value="u">U · Family</option>
         <option value="ua">U/A · Teens</option>
         <option value="a">A · 18+</option>
@@ -136,9 +136,14 @@
         <option value="8.5">IMDb 8.5+</option>
         <option value="9">IMDb 9+</option>
       </select>
+      <div class="genre-wrap">
+        <button class="select genre-toggle" id="genre-toggle" aria-expanded="false" aria-haspopup="true">
+          <span id="genre-label">All genres</span>
+        </button>
+        <div class="genre-panel" id="genre-row" aria-label="Genres" hidden></div>
+      </div>
       <button class="btn-clear" id="btn-clear" hidden>Clear ✕</button>
     </div>
-    <div class="filter-row genre-row" id="genre-row" aria-label="Genres"></div>
   </nav>
 
   <!-- ================= RESULTS ================= -->
@@ -242,6 +247,6 @@
   </div>
 
   <script src="data/titles.js?v=17"></script>
-  <script src="js/app.js?v=26"></script>
+  <script src="js/app.js?v=27"></script>
 </body>
 </html>
