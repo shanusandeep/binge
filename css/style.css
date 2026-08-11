@@ -176,7 +176,20 @@ body {
   padding: clamp(48px, 8vw, 96px) clamp(16px, 4vw, 48px) 0;
   overflow: hidden;
 }
-.hero-inner { max-width: 1200px; margin: 0 auto; }
+/* two-column hero: copy left, poster deck right — both inside one
+   centred container so the deck never drifts to the viewport edge */
+.hero-top {
+  max-width: 1500px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 64px);
+}
+@media (min-width: 1181px) {
+  .hero-top { grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr); }
+}
+.hero-inner { min-width: 0; }
 
 .hero-kicker {
   font-size: 0.85rem; font-weight: 600;
@@ -235,10 +248,9 @@ body {
 
 /* floating poster deck — fills the hero's right side on wide screens */
 .hero-deck {
-  position: absolute;
-  right: clamp(20px, 6vw, 200px);
-  top: 46%;
-  transform: translateY(-50%) rotate(4deg);
+  position: relative;
+  justify-self: center;
+  transform: rotate(4deg);
   transform-origin: center;
   width: 380px; height: 430px;
   pointer-events: none;
@@ -273,12 +285,8 @@ body {
 }
 @media (max-width: 1180px) { .hero-deck { display: none; } }
 /* grow the deck into the extra room on big screens */
-@media (min-width: 1600px) {
-  .hero-deck { transform: translateY(-50%) rotate(4deg) scale(1.22); right: 8vw; }
-}
-@media (min-width: 1900px) {
-  .hero-deck { transform: translateY(-50%) rotate(4deg) scale(1.42); right: 10vw; }
-}
+@media (min-width: 1600px) { .hero-deck { transform: rotate(4deg) scale(1.14); } }
+@media (min-width: 1900px) { .hero-deck { transform: rotate(4deg) scale(1.26); } }
 
 /* marquee strip */
 .marquee {
