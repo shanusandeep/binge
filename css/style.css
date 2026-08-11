@@ -833,6 +833,9 @@ a.badge-rating:hover {
 
 .card.is-watched .poster-img { filter: grayscale(0.85) brightness(0.5); }
 .card.is-watched .poster::before { filter: grayscale(0.6) brightness(0.6); }
+/* in the watchlist itself everything is watched — show them in full colour */
+body.is-watchlist .card.is-watched .poster-img,
+body.is-watchlist .card.is-watched .poster::before { filter: none; }
 .watched-badge {
   position: absolute; bottom: 12px; right: 12px;
   font-size: 0.66rem; font-weight: 800;

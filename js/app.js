@@ -25,6 +25,7 @@
     minRating: 0,
     sort: "rating",
     q: "",
+    watchedOnly: false,
   };
 
   /* ---------- els ---------- */
@@ -120,7 +121,9 @@
   const applyFilters = () => {
     /* name search is a global lookup — never let filters hide the title
        someone is explicitly searching for */
-    let list = state.q !== ""
+    let list = state.watchedOnly
+      ? TITLES.filter((t) => watchedSet.has(titleKey(t)))
+      : state.q !== ""
       ? TITLES.filter((t) =>
           t.title.toLowerCase().includes(state.q) ||
           (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
@@ -196,10 +199,13 @@
     grid.innerHTML = list.map(cardHTML).join("");
     emptyState.hidden = list.length > 0;
     const hi = list.filter((t) => t.lang === "hi").length;
-    resultsCount.innerHTML =
-      `<b>${list.length}</b> title${list.length === 1 ? "" : "s"}` +
+    resultsCount.innerHTML = state.watchedOnly
+      ? `<b>${list.length}</b> watched title${list.length === 1 ? "" : "s"}`
+      : `<b>${list.length}</b> title${list.length === 1 ? "" : "s"}` +
       (list.length ? ` · ${hi} Hindi / ${list.length - hi} English` : "");
     $("#btn-clear").hidden = !isFiltered();
+    const wc = $("#watched-count");
+    if (wc) wc.textContent = watchedSet.size ? `(${watchedSet.size})` : "";
     /* focused mode: filters/preset active → hide hero & rail, results on top.
        The 7+ toggle's two home states (on=7 / off=0) don't count as focus. */
     document.body.classList.toggle("is-focused",
@@ -281,7 +287,8 @@
 
   const isFiltered = () =>
     state.type !== "all" || state.lang !== "all" || state.genres.size > 0 ||
-    state.year !== "all" || state.age !== "all" || state.minRating > 0 || state.q !== "";
+    state.year !== "all" || state.age !== "all" || state.minRating > 0 ||
+    state.q !== "" || state.watchedOnly;
 
   /* ---------- render: genre chips ---------- */
   const renderChips = () => {
@@ -463,6 +470,7 @@
     renderForYou();
     if (currentDetail) updateWatchedBtn(currentDetail);
   });
+  $("#btn-watchlist").addEventListener("click", () => showWatchlist());
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".account-wrap")) accountMenu.hidden = true;
   });
@@ -615,6 +623,8 @@
       refreshAccount();
       renderGrid();
       renderForYou();
+      if (location.pathname === "/watched" && watchedSet.size)
+        showWatchlist({ push: false });
     })
     .catch(() => { /* api offline (local dev) — feature simply idle */ });
 
@@ -755,6 +765,8 @@
     $("#age-select").value = "all";
     $$(".top-link").forEach((b) => b.classList.remove("is-active"));
     state.minRating = 0; state.q = ""; state.genres.clear();
+    state.watchedOnly = false;
+    document.body.classList.remove("is-watchlist");
     document.body.classList.remove("is-searching");
     $("#search-input").value = "";
     $("#search-clear").hidden = true;
@@ -809,13 +821,32 @@
     renderGrid();
   });
 
+  const showWatchlist = ({ push = true } = {}) => {
+    clearAll();
+    if (!watchedSet.size) {
+      alert("You haven't marked anything as watched yet — open a title and tap “Mark watched”.");
+      return;
+    }
+    state.watchedOnly = true;
+    state.sort = "rating";
+    $("#sort-select").value = "rating";
+    document.body.classList.add("is-watchlist");
+    accountMenu.hidden = true;
+    renderGrid();
+    if (push && location.pathname !== "/watched") history.pushState({}, "", "/watched");
+    $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
+    ga("event", "select_content", { content_type: "preset", item_id: "watched" });
+  };
+
   const routeHome = (push) => {
     clearAll();
     if (push && location.pathname !== "/") history.pushState({}, "", "/");
   };
   window.addEventListener("popstate", () => {
     const preset = PATH_PRESET[location.pathname];
-    preset ? applyPreset(preset, { push: false, scroll: false }) : routeHome(false);
+    if (location.pathname === "/watched") showWatchlist({ push: false });
+    else if (preset) applyPreset(preset, { push: false, scroll: false });
+    else routeHome(false);
   });
 
   $("#btn-my-genres").addEventListener("click", openModal);
