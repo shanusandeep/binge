@@ -79,6 +79,13 @@ const queries = [
   // English: just the cream
   ["movie", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 500, "primary_release_date.gte": since, page: 1 }],
   ["tv", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 300, "first_air_date.gte": since, page: 1 }],
+  // ALL-TIME back catalogue — the sweeps above only look at recent releases,
+  // which is why classics and franchise entries (Rocky, Batman Begins, The
+  // Godfather II…) never arrived. No date filter here on purpose.
+  ...Array.from({ length: 6 }, (_, i) => ["movie", { sort_by: "vote_count.desc", page: i + 1 }]),
+  ...Array.from({ length: 4 }, (_, i) => ["tv", { sort_by: "vote_count.desc", page: i + 1 }]),
+  ...Array.from({ length: 5 }, (_, i) => ["movie", { with_original_language: "hi", sort_by: "vote_count.desc", page: i + 1 }]),
+  ...Array.from({ length: 3 }, (_, i) => ["tv", { with_original_language: "hi", sort_by: "vote_count.desc", page: i + 1 }]),
   // Kids & family — 16=Animation, 10751=Family; these rarely surface in the
   // popularity/rating sweeps above, so ask for them explicitly (all-time,
   // not just recent, since family favourites are evergreen)
@@ -236,6 +243,103 @@ for (const t of existing.values()) {
 }
 console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} platforms`);
 
+/* ---------- seed iconic franchises ----------
+   Collection expansion can only follow films we already hold, so seed the
+   series that the popularity sweeps miss. Each seed pulls in its whole
+   collection in the step below. */
+const FRANCHISE_SEEDS = [
+  "Rocky", "Rambo: First Blood", "Star Wars", "The Lord of the Rings: The Fellowship of the Ring",
+  "Harry Potter and the Philosopher's Stone", "Mission: Impossible", "John Wick",
+  "The Fast and the Furious", "Jurassic Park", "Raiders of the Lost Ark", "The Terminator",
+  "Alien", "Die Hard", "Back to the Future", "Ghostbusters", "Men in Black",
+  "Pirates of the Caribbean: The Curse of the Black Pearl", "X-Men", "Deadpool",
+  "Thor", "Guardians of the Galaxy", "Doctor Strange", "Black Panther", "Ant-Man",
+  "Casino Royale", "The Bourne Identity", "The Hunger Games", "Planet of the Apes",
+  "Sherlock Holmes", "Ocean's Eleven", "Shrek", "Despicable Me", "Home Alone",
+  "Kung Fu Panda", "How to Train Your Dragon", "Ice Age", "Madagascar", "Frozen",
+  "Cars", "Finding Nemo", "Monsters, Inc.", "Inside Out", "Zootopia", "Moana",
+  "The Conjuring", "Insidious", "Scream", "Saw", "Rush Hour", "Bad Boys",
+  // Hindi franchises
+  "Dhoom", "Golmaal", "Housefull", "Krrish", "Don", "Race", "Singham", "Baaghi",
+  "Ek Tha Tiger", "Dabangg", "Welcome", "Gadar: Ek Prem Katha", "Sooryavanshi",
+  "Tanhaji", "Raid", "De De Pyaar De", "Fukrey", "Student of the Year",
+];
+let seeded = 0;
+for (const name of FRANCHISE_SEEDS) {
+  try {
+    const s = await tmdb("/search/movie", { query: name });
+    const hit = (s.results || []).find((r) => r.vote_count > 200);
+    if (!hit) continue;
+    const date = hit.release_date || "";
+    const year = Number(date.slice(0, 4));
+    const title = (hit.title || "").trim();
+    if (!title || !year) continue;
+    const key = `${title.toLowerCase()}|${year}`;
+    if (existing.has(key)) continue;
+    existing.set(key, {
+      title, type: "movie", year,
+      lang: hit.original_language === "hi" ? "hi" : "en",
+      genres: mapGenres(hit.genre_ids || []).length ? mapGenres(hit.genre_ids || []) : ["Drama"],
+      rating: Math.round((hit.vote_average || 7) * 10) / 10,
+      platform: "Streaming",
+      ...(date && { released: date }),
+      plot: (hit.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "A modern classic.",
+      ...(hit.poster_path && { poster: `https://image.tmdb.org/t/p/w500${hit.poster_path}` }),
+      ...(hit.overview && { desc: hit.overview.replace(/\s+/g, " ").trim().slice(0, 550) }),
+    });
+    seeded++;
+  } catch { /* skip */ }
+}
+console.log(`● franchise seeds: ${seeded} added`);
+
+/* ---------- franchise expansion via TMDB collections ----------
+   A film that belongs to a collection (Rocky, The Dark Knight Trilogy,
+   The Matrix, The Godfather, MCU entries…) drags in all of its siblings,
+   so searching "Batman" or "Rocky" returns the whole series. */
+const seenCollections = new Set();
+let franchiseAdded = 0;
+for (const t of [...existing.values()]) {
+  if (t.type !== "movie" || t.lang !== "en") continue; // Hindi films rarely use collections
+  try {
+    const s = await tmdb("/search/movie", { query: t.title, year: String(t.year) });
+    const hit = (s.results || [])[0];
+    if (!hit) continue;
+    const det = await tmdb(`/movie/${hit.id}`);
+    const col = det.belongs_to_collection;
+    if (!col) continue;
+    /* remember the franchise name on the seed film so searching the series
+       name ("Batman") finds every entry ("The Dark Knight") */
+    const colName = col.name.replace(/\s*(Collection|Series|Saga|Trilogy)\s*$/i, "").trim();
+    if (colName) t.collection = colName;
+    if (seenCollections.has(col.id)) continue;
+    seenCollections.add(col.id);
+    const parts = (await tmdb(`/collection/${col.id}`)).parts || [];
+    for (const p of parts) {
+      const date = p.release_date || "";
+      const year = Number(date.slice(0, 4));
+      const title = (p.title || "").trim();
+      if (!title || !year || year > new Date().getFullYear()) continue;
+      if (p.vote_count < 50) continue;               // skip obscure spin-offs
+      const key = `${title.toLowerCase()}|${year}`;
+      if (existing.has(key)) continue;
+      existing.set(key, {
+        title, type: "movie", year,
+        lang: p.original_language === "hi" ? "hi" : "en",
+        genres: mapGenres(p.genre_ids || []).length ? mapGenres(p.genre_ids || []) : ["Drama"],
+        rating: Math.round((p.vote_average || 6.5) * 10) / 10,
+        platform: "Streaming",
+        ...(date && { released: date }),
+        ...(colName && { collection: colName }),
+        plot: (p.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "Part of the series.",
+        ...(p.poster_path && { poster: `https://image.tmdb.org/t/p/w500${p.poster_path}` }),
+        ...(p.overview && { desc: p.overview.replace(/\s+/g, " ").trim().slice(0, 550) }),
+      });
+      franchiseAdded++;
+    }
+  } catch { /* skip this title */ }
+}
+console.log(`● franchises: ${franchiseAdded} sequels/prequels added from ${seenCollections.size} collections`);
+
 /* ---------- true IMDb ratings from IMDb's official daily dataset ----------
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
    for every tt id we hold. Overrides TMDB approximations everywhere. */
@@ -275,6 +379,7 @@ const entry = (t) => {
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
     ...(t.cert && { cert: t.cert }),
+    ...(t.collection && { collection: t.collection }),
     ...(t.released && { released: t.released }),
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),

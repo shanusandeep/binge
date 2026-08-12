@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=25" />
+  <link rel="stylesheet" href="css/style.css?v=26" />
   <!-- Google Analytics (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-M83077SW5W"></script>
   <script>
@@ -34,6 +34,10 @@
       <button class="top-link" data-preset="recent">Recent</button>
       <button class="top-link" data-preset="hits">All-time hits</button>
       <button class="top-link top-toggle" id="btn-seven" aria-pressed="false" title="Only IMDb 7 and above">★ 7+</button>
+      <button class="top-link top-sync" id="btn-sync" title="Fetch newly released movies & series">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="sr-only">Sync catalogue</span>
+      </button>
     </nav>
     <div class="header-actions">
       <label class="search" for="search-input">
@@ -249,7 +253,7 @@
     </div>
   </div>
 
-  <script src="data/titles.js?v=17"></script>
-  <script src="js/app.js?v=28"></script>
+  <script src="data/titles.js?v=19"></script>
+  <script src="js/app.js?v=30"></script>
 </body>
 </html>

@@ -124,9 +124,19 @@
     let list = state.watchedOnly
       ? TITLES.filter((t) => watchedSet.has(titleKey(t)))
       : state.q !== ""
-      ? TITLES.filter((t) =>
-          t.title.toLowerCase().includes(state.q) ||
-          (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)))
+      ? (() => {
+          const direct = TITLES.filter((t) =>
+            t.title.toLowerCase().includes(state.q) ||
+            (t.collection || "").toLowerCase().includes(state.q) ||
+            (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)));
+          /* pull in the rest of any franchise a match belongs to, so
+             "batman" also returns The Dark Knight and its sequel */
+          const cols = new Set(direct.map((t) => t.collection).filter(Boolean));
+          if (!cols.size) return direct;
+          const ids = new Set(direct.map((t) => t._id));
+          return direct.concat(
+            TITLES.filter((t) => t.collection && cols.has(t.collection) && !ids.has(t._id)));
+        })()
       : TITLES.filter((t) =>
           (state.type === "all" || t.type === state.type) &&
           (state.lang === "all" || t.lang === state.lang) &&
@@ -743,6 +753,23 @@
   const resetRoute = () => {
     if (PATH_PRESET?.[location.pathname]) history.pushState({}, "", "/");
   };
+
+  /* ---------- manual catalogue sync ---------- */
+  const syncBtn = $("#btn-sync");
+  syncBtn.addEventListener("click", async () => {
+    if (syncBtn.classList.contains("is-busy")) return;
+    syncBtn.classList.add("is-busy");
+    try {
+      const r = await fetch("/api/sync", { method: "POST" });
+      const d = await r.json();
+      alert(r.ok ? d.message : (d.error || "Could not start the sync."));
+      ga("event", "manual_sync", { ok: r.ok });
+    } catch {
+      alert("Could not reach the server — try again in a moment.");
+    } finally {
+      setTimeout(() => syncBtn.classList.remove("is-busy"), 2000);
+    }
+  });
 
   /* ---------- genre dropdown ---------- */
   const genreToggle = $("#genre-toggle");

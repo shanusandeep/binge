@@ -286,6 +286,7 @@ const entry = (t) => {
     ...(t.cast?.length && { cast: t.cast }),
     ...(t.runtime && { runtime: t.runtime }),
     ...(t.cert && { cert: t.cert }),
+    ...(t.collection && { collection: t.collection }),
     ...(t.released && { released: t.released }),
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),

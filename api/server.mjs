@@ -103,6 +103,33 @@ const server = http.createServer(async (req, res) => {
   try {
     if (path === "/api/health") return json(res, 200, { ok: true });
 
+    /* trigger the catalogue sync workflow on demand (the same job the 7am
+       cron runs). Needs GITHUB_TOKEN with actions:write on the repo. */
+    if (path === "/api/sync" && req.method === "POST") {
+      const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?";
+      if (rateLimited(ip)) return json(res, 429, { error: "too many requests — try later" });
+      const token = process.env.GITHUB_TOKEN;
+      const repo = process.env.GITHUB_REPO || "shanusandeep/binge";
+      if (!token)
+        return json(res, 503, { error: "sync not configured — add GITHUB_TOKEN on the server" });
+      const gh = await fetch(
+        `https://api.github.com/repos/${repo}/actions/workflows/sync.yml/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "User-Agent": "binge-api",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ref: "main" }),
+        }
+      );
+      if (gh.status === 204)
+        return json(res, 200, { ok: true, message: "Sync started — new titles appear within ~30 minutes." });
+      return json(res, 502, { error: `GitHub said ${gh.status}` });
+    }
+
     if (path === "/api/auth/google" && req.method === "POST") {
       const { credential } = await readBody(req);
       if (!credential) return json(res, 400, { error: "credential required" });
