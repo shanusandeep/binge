@@ -41,13 +41,25 @@ const minVotes = (lang, kind, date) => {
 const LOOKBACK_DAYS = 400;     // how far back "latest" reaches
 const PAGES = 3;               // TMDB pages per discover query
 
-const tmdb = async (p, params = {}) => {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Backfill re-checks 100+ titles a run with several calls each — without
+// retry, a single transient 429/5xx silently aborts that title's update for
+// the whole run (this is why Cocktail 2's Netflix arrival got missed: the
+// data was there, the request just failed once and nothing tried again).
+const tmdb = async (p, params = {}, tries = 4) => {
   const url = new URL(TMDB + p);
   url.searchParams.set("api_key", TMDB_KEY);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TMDB ${p} → ${res.status} ${await res.text()}`);
-  return res.json();
+  for (let i = 0; i < tries; i++) {
+    const res = await fetch(url);
+    if (res.ok) return res.json();
+    if ((res.status === 429 || res.status >= 500) && i < tries - 1) {
+      await sleep(800 * 2 ** i + Math.random() * 400);
+      continue;
+    }
+    throw new Error(`TMDB ${p} → ${res.status} ${await res.text()}`);
+  }
 };
 
 /* ---------- load existing DB ---------- */
@@ -176,13 +188,23 @@ const PROVIDER_NORMALISE = {
   "Amazon miniTV": "Amazon MX Player", "MX Player": "Amazon MX Player",
   "Apple TV Plus": "Apple TV+", "Apple TV": "Apple TV+",
 };
+/* Returns { name, kind: "stream" | "buy" } or null if TMDB has no India (or
+   US fallback) provider data at all. Subscription streaming (flatrate/ads/
+   free) is reported separately from rent/buy — conflating the two is what
+   caused old catalog titles (Rocky 1976, Se7en, Casino Royale — rent/buy
+   only in India) to get mislabeled as if they were still in theatres. */
 const indianPlatform = async (kind, id) => {
   try {
     const d = await tmdb(`/${kind}/${id}/watch/providers`);
     const region = d.results?.IN || d.results?.US;
-    const p = region?.flatrate?.[0] || region?.ads?.[0] || region?.free?.[0];
-    if (!p?.provider_name) return null;
-    return PROVIDER_NORMALISE[p.provider_name] || p.provider_name;
+    if (!region) return null;
+    const stream = region.flatrate?.[0] || region.ads?.[0] || region.free?.[0];
+    if (stream?.provider_name)
+      return { name: PROVIDER_NORMALISE[stream.provider_name] || stream.provider_name, kind: "stream" };
+    const buy = region.buy?.[0] || region.rent?.[0];
+    if (buy?.provider_name)
+      return { name: PROVIDER_NORMALISE[buy.provider_name] || buy.provider_name, kind: "buy" };
+    return null;
   } catch { return null; }
 };
 
@@ -236,10 +258,18 @@ for (const t of existing.values()) {
     }
     if (["Streaming", "Theatres"].includes(t.platform)) {
       const plat = await indianPlatform(kind, hit.id);
-      if (plat) { t.platform = plat; platFilled++; }
-      else if (t.type === "movie" && t.platform === "Streaming") t.platform = "Theatres";
+      if (plat?.kind === "stream") { t.platform = plat.name; platFilled++; }
+      else if (plat?.kind === "buy") { t.platform = `${plat.name} (Buy/Rent)`; platFilled++; }
+      else {
+        // No provider info anywhere. "Theatres" is only a truthful label for
+        // a genuinely recent release still awaiting OTT — never stamp it on
+        // an old catalog title just because TMDB lacks India data for it.
+        const days = t.released ? (Date.now() - new Date(t.released).getTime()) / 864e5 : 9999;
+        if (t.type === "movie" && days >= 0 && days <= 180) t.platform = "Theatres";
+      }
     }
-  } catch { /* leave as-is */ }
+  } catch { /* leave as-is — will retry next sync */ }
+  await sleep(60); // stay well clear of TMDB's rate limit across ~100+ rechecks
 }
 console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} platforms`);
 
