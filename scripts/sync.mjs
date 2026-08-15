@@ -370,6 +370,38 @@ for (const t of [...existing.values()]) {
 }
 console.log(`● franchises: ${franchiseAdded} sequels/prequels added from ${seenCollections.size} collections`);
 
+/* ---------- universe tags (Marvel / DC) ----------
+   TMDB's "collection" is per-franchise (Iron Man, Thor, The Avengers…) with
+   no umbrella grouping, so searching "Marvel" or "DC" found nothing even
+   though every MCU film was already in the catalogue under its own series.
+   Stamp a shared tag across every collection in each universe so the
+   existing tag-search picks the whole universe up in one query. Runs every
+   sync, so any newly-discovered franchise entry gets tagged immediately. */
+const MCU_COLLECTIONS = new Set([
+  "Iron Man", "Captain America", "The Avengers", "Thor", "Doctor Strange",
+  "Black Panther", "Ant-Man", "Guardians of the Galaxy", "Spider-Man (MCU)",
+  "Captain Marvel", "Eternals", "Shang-Chi", "Black Widow",
+]);
+const MARVEL_ONLY_COLLECTIONS = new Set([
+  "X-Men", "The Wolverine", "Deadpool", "Venom", "Fantastic Four",
+  "Spider-Man", "The Amazing Spider-Man", "Spider-Man: Spider-Verse",
+]);
+const DC_COLLECTIONS = new Set([
+  "The Dark Knight", "The Batman", "Man of Steel", "Wonder Woman",
+  "Suicide Squad", "Superman (DCU)", "Aquaman", "Shazam", "Joker",
+]);
+let universeTagged = 0;
+for (const t of existing.values()) {
+  if (!t.collection) continue;
+  const tags = new Set(t.tags || []);
+  const before = tags.size;
+  if (MCU_COLLECTIONS.has(t.collection)) { tags.add("Marvel"); tags.add("MCU"); }
+  else if (MARVEL_ONLY_COLLECTIONS.has(t.collection)) { tags.add("Marvel"); }
+  else if (DC_COLLECTIONS.has(t.collection)) { tags.add("DC"); }
+  if (tags.size !== before) { t.tags = [...tags]; universeTagged++; }
+}
+console.log(`● universe tags: ${universeTagged} titles tagged Marvel/DC`);
+
 /* ---------- true IMDb ratings from IMDb's official daily dataset ----------
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
    for every tt id we hold. Overrides TMDB approximations everywhere. */

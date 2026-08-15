@@ -128,7 +128,9 @@
           const direct = TITLES.filter((t) =>
             t.title.toLowerCase().includes(state.q) ||
             (t.collection || "").toLowerCase().includes(state.q) ||
-            (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)));
+            (t.director || "").toLowerCase().includes(state.q) ||
+            (t.tags || []).some((tag) => tag.toLowerCase().includes(state.q)) ||
+            (t.cast || []).some((actor) => actor.toLowerCase().includes(state.q)));
           /* pull in the rest of any franchise a match belongs to, so
              "batman" also returns The Dark Knight and its sequel */
           const cols = new Set(direct.map((t) => t.collection).filter(Boolean));
