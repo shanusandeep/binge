@@ -30,6 +30,7 @@ db.exec(`
   );
 `);
 try { db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT"); } catch { /* exists */ }
+try { db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0"); } catch { /* exists */ }
 db.exec(`
   CREATE TABLE IF NOT EXISTS password_resets (
     token_hash TEXT PRIMARY KEY,
@@ -96,6 +97,20 @@ const readBody = (req) => new Promise((resolve, reject) => {
 const userWatched = (uid) =>
   db.prepare("SELECT title_key FROM watched WHERE user_id = ?").all(uid).map((r) => r.title_key);
 
+/* ---------- admin allowlist ----------
+   No manual DB flip needed: any account whose email is in ADMIN_EMAILS
+   (comma-separated, set in /srv/binge/.env) is promoted the moment it signs
+   in — via Google or a normal email/password account, whichever the owner
+   already uses. Re-checked on every login so the allowlist can grow later. */
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+);
+const syncAdminFlag = (uid, email) => {
+  const shouldBeAdmin = ADMIN_EMAILS.has(String(email || "").toLowerCase()) ? 1 : 0;
+  db.prepare("UPDATE users SET is_admin = ? WHERE id = ? AND is_admin != ?").run(shouldBeAdmin, uid, shouldBeAdmin);
+  return !!shouldBeAdmin;
+};
+
 /* ---------- routes ---------- */
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -141,8 +156,9 @@ const server = http.createServer(async (req, res) => {
         ON CONFLICT(sub) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture`)
         .run(g.sub, g.email || "", g.name || "", g.picture || "");
       const uid = db.prepare("SELECT id FROM users WHERE sub = ?").get(g.sub).id;
+      const isAdmin = syncAdminFlag(uid, g.email);
       return json(res, 200,
-        { user: { name: g.name, email: g.email, picture: g.picture }, watched: userWatched(uid) },
+        { user: { name: g.name, email: g.email, picture: g.picture, isAdmin }, watched: userWatched(uid) },
         { "Set-Cookie": cookie(sign(uid), 60 * 60 * 24 * 180) });
     }
 
@@ -164,7 +180,8 @@ const server = http.createServer(async (req, res) => {
       db.prepare("INSERT INTO users (sub, email, name, password_hash) VALUES (?, ?, ?, ?)")
         .run("email:" + em, em, nm, hashPassword(password));
       const uid = db.prepare("SELECT id FROM users WHERE sub = ?").get("email:" + em).id;
-      return json(res, 200, { user: { name: nm, email: em, picture: null }, watched: [] },
+      const isAdmin = syncAdminFlag(uid, em);
+      return json(res, 200, { user: { name: nm, email: em, picture: null, isAdmin }, watched: [] },
         { "Set-Cookie": cookie(sign(uid), 60 * 60 * 24 * 180) });
     }
 
@@ -178,8 +195,9 @@ const server = http.createServer(async (req, res) => {
         return json(res, 401, { error: u ? "this email uses Google sign-in" : "no account with that email" });
       if (!verifyPassword(String(password || ""), u.password_hash))
         return json(res, 401, { error: "wrong password" });
+      const isAdmin = syncAdminFlag(u.id, u.email);
       return json(res, 200,
-        { user: { name: u.name, email: u.email, picture: u.picture }, watched: userWatched(u.id) },
+        { user: { name: u.name, email: u.email, picture: u.picture, isAdmin }, watched: userWatched(u.id) },
         { "Set-Cookie": cookie(sign(u.id), 60 * 60 * 24 * 180) });
     }
 
@@ -227,8 +245,9 @@ const server = http.createServer(async (req, res) => {
       db.prepare("UPDATE password_resets SET used = 1 WHERE token_hash = ?").run(th);
       db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(password), row.user_id);
       const u = db.prepare("SELECT id, name, email, picture FROM users WHERE id = ?").get(row.user_id);
+      const isAdmin = syncAdminFlag(u.id, u.email);
       return json(res, 200,
-        { user: { name: u.name, email: u.email, picture: u.picture }, watched: userWatched(u.id) },
+        { user: { name: u.name, email: u.email, picture: u.picture, isAdmin }, watched: userWatched(u.id) },
         { "Set-Cookie": cookie(sign(u.id), 60 * 60 * 24 * 180) });
     }
 
@@ -252,11 +271,56 @@ const server = http.createServer(async (req, res) => {
     /* everything below needs a session */
     const uid = verify(req.headers.cookie);
     if (!uid) return json(res, 401, { error: "not signed in" });
-    const u = db.prepare("SELECT name, email, picture FROM users WHERE id = ?").get(uid);
+    const u = db.prepare("SELECT name, email, picture, is_admin FROM users WHERE id = ?").get(uid);
     if (!u) return json(res, 401, { error: "not signed in" });
 
     if (path === "/api/me")
-      return json(res, 200, { user: u, watched: userWatched(uid) });
+      return json(res, 200,
+        { user: { name: u.name, email: u.email, picture: u.picture, isAdmin: !!u.is_admin }, watched: userWatched(uid) });
+
+    if (path === "/api/admin/stats") {
+      if (!u.is_admin) return json(res, 403, { error: "admin only" });
+
+      const totalUsers = db.prepare("SELECT COUNT(*) n FROM users").get().n;
+      const newUsers7d = db.prepare("SELECT COUNT(*) n FROM users WHERE created_at >= datetime('now','-7 days')").get().n;
+      const googleUsers = db.prepare("SELECT COUNT(*) n FROM users WHERE password_hash IS NULL").get().n;
+      const totalWatchMarks = db.prepare("SELECT COUNT(*) n FROM watched").get().n;
+      const usersWithWatched = db.prepare("SELECT COUNT(DISTINCT user_id) n FROM watched").get().n;
+      const recentUsers = db.prepare(
+        "SELECT name, email, created_at, is_admin, (password_hash IS NULL) as google FROM users ORDER BY created_at DESC LIMIT 12"
+      ).all();
+
+      // catalogue counts + last sync time live in the static site's data
+      // file, not this DB — read it over the shared docker network rather
+      // than duplicating the numbers into sqlite.
+      let catalogue = null;
+      try {
+        const webHost = process.env.WEB_INTERNAL_URL || "http://binge-web:80";
+        const txt = await (await fetch(`${webHost}/data/titles.js`)).text();
+        const jsonText = txt.slice(txt.indexOf("{", txt.indexOf("window.BINGE_DB")), txt.lastIndexOf("}") + 1);
+        const dbFile = (0, eval)("(" + jsonText + ")");
+        const titles = dbFile.titles || [];
+        catalogue = {
+          syncedAt: dbFile.syncedAt || null,
+          total: titles.length,
+          movies: titles.filter((t) => t.type === "movie").length,
+          series: titles.filter((t) => t.type === "series").length,
+          hindi: titles.filter((t) => t.lang === "hi").length,
+          english: titles.filter((t) => t.lang === "en").length,
+          withPoster: titles.filter((t) => t.poster).length,
+        };
+      } catch (e) { console.error("catalogue fetch failed", e.message); }
+
+      return json(res, 200, {
+        users: { total: totalUsers, newLast7Days: newUsers7d, viaGoogle: googleUsers, viaPassword: totalUsers - googleUsers },
+        watched: { totalMarks: totalWatchMarks, usersWithAtLeastOne: usersWithWatched },
+        catalogue,
+        recentUsers: recentUsers.map((r) => ({
+          name: r.name, email: r.email, joinedAt: r.created_at,
+          method: r.google ? "Google" : "Email", isAdmin: !!r.is_admin,
+        })),
+      });
+    }
 
     if (path === "/api/watched" && req.method === "POST") {
       const { key, watched } = await readBody(req);

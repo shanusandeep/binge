@@ -794,6 +794,71 @@ a.card-platform:hover { color: var(--saffron); border-color: var(--saffron-deep)
   from { opacity: 0; transform: translateY(24px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+.modal-admin {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.modal-admin .detail-close { position: absolute; top: 18px; right: 18px; }
+.admin-loading { color: var(--text-dim); padding: 30px 0; }
+.admin-error { color: var(--chili); padding: 20px 0; }
+.admin-section { margin-top: 26px; }
+.admin-section:first-child { margin-top: 20px; }
+.admin-section-title {
+  font-size: 0.76rem; font-weight: 800;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 12px;
+}
+.admin-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.admin-tile {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.admin-tile b {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.7rem;
+  color: var(--text);
+  line-height: 1.15;
+}
+.admin-tile b em { font-style: normal; color: var(--saffron); font-size: 0.7em; }
+.admin-tile span {
+  font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.admin-synced { font-size: 0.85rem; color: var(--text-dim); margin-top: 10px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.admin-table th {
+  text-align: left; font-weight: 700;
+  color: var(--text-faint); font-size: 0.72rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 6px 10px; border-bottom: 1px solid var(--line-soft);
+}
+.admin-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table .admin-badge {
+  display: inline-block;
+  font-size: 0.68rem; font-weight: 800;
+  color: #140d02; background: var(--saffron);
+  border-radius: 5px; padding: 1px 6px;
+  margin-left: 6px;
+}
 .modal-kicker {
   color: var(--saffron);
   font-size: 0.8rem; font-weight: 700;

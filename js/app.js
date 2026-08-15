@@ -540,10 +540,12 @@
         : esc((user.name || "Account").split(" ")[0]);
       accountBtn.classList.add("is-user");
       $("#account-name").textContent = user.name || user.email || "";
+      $("#btn-admin").hidden = !user.isAdmin;
     } else {
       accountBtn.textContent = "Sign in";
       accountBtn.classList.remove("is-user");
       accountMenu.hidden = true;
+      $("#btn-admin").hidden = true;
     }
   };
   accountBtn.addEventListener("click", () => {
@@ -563,6 +565,81 @@
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".account-wrap")) accountMenu.hidden = true;
   });
+
+  /* ---------- admin dashboard ---------- */
+  const adminVeil = $("#admin-veil");
+  const adminBody = $("#admin-body");
+  const fmtDate = (iso) => {
+    if (!iso) return "—";
+    const d = iso.length <= 10 ? new Date(iso + "T00:00:00") : new Date(iso.replace(" ", "T") + "Z");
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  const renderAdmin = (s) => {
+    const u = s.users, w = s.watched, c = s.catalogue;
+    adminBody.innerHTML = `
+      <div class="admin-section">
+        <p class="admin-section-title">Registered users</p>
+        <div class="admin-tiles">
+          <div class="admin-tile"><b>${u.total}</b><span>Total accounts</span></div>
+          <div class="admin-tile"><b>${u.newLast7Days}<em>+</em></b><span>New (7 days)</span></div>
+          <div class="admin-tile"><b>${u.viaGoogle}</b><span>Via Google</span></div>
+          <div class="admin-tile"><b>${u.viaPassword}</b><span>Via email</span></div>
+        </div>
+      </div>
+      <div class="admin-section">
+        <p class="admin-section-title">Catalogue</p>
+        ${c ? `
+        <div class="admin-tiles">
+          <div class="admin-tile"><b>${c.total}</b><span>Total titles</span></div>
+          <div class="admin-tile"><b>${c.movies}</b><span>Movies</span></div>
+          <div class="admin-tile"><b>${c.series}</b><span>Series</span></div>
+          <div class="admin-tile"><b>${c.hindi}</b><span>Hindi</span></div>
+          <div class="admin-tile"><b>${c.english}</b><span>English</span></div>
+          <div class="admin-tile"><b>${c.withPoster}</b><span>With posters</span></div>
+        </div>
+        <p class="admin-synced">Last synced ${esc(fmtDate(c.syncedAt))}</p>
+        ` : `<p class="admin-error">Catalogue data unavailable right now.</p>`}
+      </div>
+      <div class="admin-section">
+        <p class="admin-section-title">Engagement</p>
+        <div class="admin-tiles">
+          <div class="admin-tile"><b>${w.totalMarks}</b><span>Watched marks</span></div>
+          <div class="admin-tile"><b>${w.usersWithAtLeastOne}</b><span>Active users</span></div>
+        </div>
+      </div>
+      <div class="admin-section">
+        <p class="admin-section-title">Recent signups</p>
+        <table class="admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Via</th><th>Joined</th></tr></thead>
+          <tbody>${s.recentUsers.map((r) => `
+            <tr>
+              <td>${esc(r.name || "—")}${r.isAdmin ? `<span class="admin-badge">Admin</span>` : ""}</td>
+              <td>${esc(r.email || "—")}</td>
+              <td>${esc(r.method)}</td>
+              <td>${esc(fmtDate(r.joinedAt))}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  };
+
+  const openAdmin = async () => {
+    accountMenu.hidden = true;
+    adminVeil.hidden = false;
+    document.body.style.overflow = "hidden";
+    adminBody.innerHTML = `<p class="admin-loading">Loading…</p>`;
+    try {
+      const r = await fetch("/api/admin/stats");
+      if (!r.ok) throw new Error(r.status === 403 ? "Admin access required." : "Failed to load.");
+      renderAdmin(await r.json());
+    } catch (e) {
+      adminBody.innerHTML = `<p class="admin-error">${esc(e.message || "Couldn't load the dashboard.")}</p>`;
+    }
+  };
+  const closeAdmin = () => { adminVeil.hidden = true; document.body.style.overflow = ""; };
+  $("#btn-admin").addEventListener("click", openAdmin);
+  $("#admin-close").addEventListener("click", closeAdmin);
+  adminVeil.addEventListener("click", (e) => { if (e.target === adminVeil) closeAdmin(); });
 
   const signinVeil = $("#signin-veil");
   let gsiLoaded = false;
@@ -1078,6 +1155,7 @@
     const sheet = $("#sheet-veil");
     if (!detailVeil.hidden) closeDetail();
     else if (!signinVeil.hidden) closeSignin();
+    else if (!adminVeil.hidden) closeAdmin();
     else if (sheet && !sheet.hidden) { sheet.hidden = true; document.body.style.overflow = ""; }
     else if (!modalVeil.hidden) closeModal();
   });
