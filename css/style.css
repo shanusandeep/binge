@@ -736,7 +736,11 @@ a.badge-rating:hover {
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
+  text-decoration: none;
 }
+a.card-platform { cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+a.card-platform:hover { color: var(--saffron); border-color: var(--saffron-deep); }
+#detail-platform.is-plain { cursor: default; pointer-events: none; }
 
 /* ---------- empty state ---------- */
 .empty {

@@ -185,6 +185,48 @@
     ? `https://www.imdb.com/title/${t.imdb}/`
     : `https://www.imdb.com/find/?q=${encodeURIComponent(t.title + " " + t.year)}`;
 
+  /* ---------- platform link ----------
+     TMDB doesn't expose a direct per-title deep link into Netflix/Prime/etc
+     (that's JustWatch's paid affiliate data) — so instead build each
+     service's own search URL. One extra click, but lands right where the
+     title actually is, on the actual service, not a middleman page. */
+  const PLATFORM_SEARCH = {
+    "Netflix": (q) => `https://www.netflix.com/search?q=${q}`,
+    "Prime Video": (q) => `https://www.primevideo.com/search?phrase=${q}`,
+    "Amazon MX Player": (q) => `https://www.primevideo.com/search?phrase=${q}`,
+    "JioHotstar": (q) => `https://www.hotstar.com/in/search?q=${q}`,
+    "Disney+": (q) => `https://www.disneyplus.com/search?q=${q}`,
+    "Max": (q) => `https://www.max.com/search?q=${q}`,
+    "Hulu": (q) => `https://www.hulu.com/search?q=${q}`,
+    "SonyLIV": (q) => `https://www.sonyliv.com/search?searchTerm=${q}`,
+    "ZEE5": (q) => `https://www.zee5.com/search?q=${q}`,
+    "Apple TV+": (q) => `https://tv.apple.com/search?term=${q}`,
+    "Apple TV Store": (q) => `https://tv.apple.com/search?term=${q}`,
+    "Paramount+": (q) => `https://www.paramountplus.com/search?query=${q}`,
+    "Peacock": (q) => `https://www.peacocktv.com/search?q=${q}`,
+    "Lionsgate Play": (q) => `https://www.lionsgateplay.com/search?q=${q}`,
+    "Lionsgate+": (q) => `https://www.lionsgateplay.com/search?q=${q}`,
+    "YouTube": (q) => `https://www.youtube.com/results?search_query=${q}`,
+    "YouTube Free": (q) => `https://www.youtube.com/results?search_query=${q}`,
+    "YouTube TV": (q) => `https://www.youtube.com/results?search_query=${q}`,
+    "Google Play Movies": (q) => `https://play.google.com/store/search?q=${q}&c=movies`,
+    "Tubi TV": (q) => `https://tubitv.com/search/${q}`,
+    "The Roku Channel": (q) => `https://therokuchannel.roku.com/search?query=${q}`,
+    "Crunchyroll": (q) => `https://www.crunchyroll.com/search?q=${q}`,
+    "Pluto TV": (q) => `https://pluto.tv/en/search/${q}`,
+    "Plex": (q) => `https://watch.plex.tv/search?query=${q}`,
+  };
+  const platformURL = (t) => {
+    const raw = regionPlatform(t);
+    const q = encodeURIComponent(t.title);
+    if (raw === "Theatres") return `https://www.google.com/search?q=${encodeURIComponent(t.title + " showtimes")}`;
+    if (raw === "Streaming") return null; // not yet resolved to a real service
+    const base = raw.replace(/\s*\(Buy\/Rent\)$/, "");
+    if (PLATFORM_SEARCH[base]) return PLATFORM_SEARCH[base](q);
+    // long-tail services without a template: a search still gets close
+    return `https://www.google.com/search?q=${encodeURIComponent(`watch "${t.title}" on ${base}`)}`;
+  };
+
   /* ---------- region-aware platform ----------
      JioHotstar/ZEE5/SonyLIV mean nothing outside India, so a US visitor
      shouldn't see them as if they were watchable there. No IP lookup (extra
@@ -225,7 +267,12 @@
         </p>
         <p class="card-foot">
           <span class="card-genres">${t.genres.slice(0, 2).join(" / ")}</span>
-          <span class="card-platform">${esc(regionPlatform(t))}</span>
+          ${(() => {
+            const url = platformURL(t);
+            return url
+              ? `<a class="card-platform" href="${url}" target="_blank" rel="noopener" title="Find on ${esc(regionPlatform(t))}">${esc(regionPlatform(t))}</a>`
+              : `<span class="card-platform">${esc(regionPlatform(t))}</span>`;
+          })()}
         </p>
       </div>
     </article>`;
@@ -443,7 +490,11 @@
     const link = $("#detail-imdb");
     link.href = imdbURL(t);
     $("#detail-imdb-rating").textContent = t.rating.toFixed(1) + " / 10";
-    $("#detail-platform").textContent = regionPlatform(t);
+    const platEl = $("#detail-platform");
+    platEl.textContent = regionPlatform(t);
+    const platUrl = platformURL(t);
+    if (platUrl) { platEl.href = platUrl; platEl.classList.remove("is-plain"); }
+    else { platEl.removeAttribute("href"); platEl.classList.add("is-plain"); }
     currentDetail = t;
     updateWatchedBtn(t);
     ga("event", "view_title", { item_name: t.title, item_id: t.imdb || "", rating: t.rating, lang: t.lang });
@@ -671,12 +722,19 @@
     document.body.style.overflow = "";
   };
 
-  /* open on card click / Enter — rating badge link is left alone */
+  /* open on card click / Enter — rating badge and platform links are left alone */
   document.addEventListener("click", (e) => {
     const badge = e.target.closest(".badge-rating");
     if (badge) {
       const c = badge.closest("[data-id]");
       if (c) ga("event", "imdb_click", { item_name: TITLES[Number(c.dataset.id)]?.title || "" });
+      e.stopPropagation();
+      return;
+    }
+    const platLink = e.target.closest("a.card-platform");
+    if (platLink) {
+      const c = platLink.closest("[data-id]");
+      if (c) ga("event", "platform_click", { item_name: TITLES[Number(c.dataset.id)]?.title || "", platform: platLink.textContent });
       e.stopPropagation();
       return;
     }
