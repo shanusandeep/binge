@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=26" />
+  <link rel="stylesheet" href="css/style.css?v=27" />
   <!-- Google Analytics (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-M83077SW5W"></script>
   <script>
@@ -40,11 +40,14 @@
       </button>
     </nav>
     <div class="header-actions">
-      <label class="search" for="search-input">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <input id="search-input" type="search" placeholder="Search titles…" autocomplete="off" />
-        <button type="button" class="search-clear" id="search-clear" aria-label="Clear search" hidden>✕</button>
-      </label>
+      <div class="search-wrap">
+        <label class="search" for="search-input">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="search-input" type="search" placeholder="Search titles, cast, director…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-suggest" aria-autocomplete="list" />
+          <button type="button" class="search-clear" id="search-clear" aria-label="Clear search" hidden>✕</button>
+        </label>
+        <div class="search-suggest" id="search-suggest" role="listbox" hidden></div>
+      </div>
       <button class="btn-genres" id="btn-my-genres">
         <span aria-hidden="true">✦</span> My Genres
       </button>
@@ -254,6 +257,6 @@
   </div>
 
   <script src="data/titles.js?v=19"></script>
-  <script src="js/app.js?v=30"></script>
+  <script src="js/app.js?v=31"></script>
 </body>
 </html>

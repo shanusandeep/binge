@@ -70,6 +70,21 @@
               TITLES.filter((t) => t.genres.includes(a)).length
   );
 
+  /* ---------- people index (for search autosuggest) ---------- */
+  const PEOPLE = (() => {
+    const m = new Map(); // name -> { count, bestRating }
+    for (const t of TITLES) {
+      const names = [...(t.cast || []), ...(t.director || "").split(",").map((s) => s.trim())].filter(Boolean);
+      for (const name of names) {
+        const p = m.get(name) || { count: 0, bestRating: 0 };
+        p.count++;
+        p.bestRating = Math.max(p.bestRating, t.rating);
+        m.set(name, p);
+      }
+    }
+    return [...m.entries()].map(([name, p]) => ({ name, ...p }));
+  })();
+
   const posterBg = (t) => {
     const h1 = GENRE_HUES[t.genres[0]] ?? 30;
     const h2 = GENRE_HUES[t.genres[1]] ?? (h1 + 40) % 360;
@@ -170,6 +185,17 @@
     ? `https://www.imdb.com/title/${t.imdb}/`
     : `https://www.imdb.com/find/?q=${encodeURIComponent(t.title + " " + t.year)}`;
 
+  /* ---------- region-aware platform ----------
+     JioHotstar/ZEE5/SonyLIV mean nothing outside India, so a US visitor
+     shouldn't see them as if they were watchable there. No IP lookup (extra
+     request, a privacy ask for a personal recs site) — the visitor's own
+     timezone is a free, client-side, good-enough signal: IST readers are
+     overwhelmingly the India audience this site is built for. */
+  const isIndiaTZ = /^Asia\/(Kolkata|Calcutta)$/.test(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+  const regionPlatform = (t) =>
+    (!isIndiaTZ && t.platformUs) ? t.platformUs : t.platform;
+
   const cardHTML = (t, i) => {
     const langTag = t.lang === "hi" ? "हिंदी" : "English";
     const typeTag = t.type === "movie" ? "Film" : "Series";
@@ -199,7 +225,7 @@
         </p>
         <p class="card-foot">
           <span class="card-genres">${t.genres.slice(0, 2).join(" / ")}</span>
-          <span class="card-platform">${t.platform}</span>
+          <span class="card-platform">${esc(regionPlatform(t))}</span>
         </p>
       </div>
     </article>`;
@@ -417,7 +443,7 @@
     const link = $("#detail-imdb");
     link.href = imdbURL(t);
     $("#detail-imdb-rating").textContent = t.rating.toFixed(1) + " / 10";
-    $("#detail-platform").textContent = t.platform;
+    $("#detail-platform").textContent = regionPlatform(t);
     currentDetail = t;
     updateWatchedBtn(t);
     ga("event", "view_title", { item_name: t.title, item_id: t.imdb || "", rating: t.rating, lang: t.lang });
@@ -714,8 +740,101 @@
     renderGrid();
   });
 
+  /* ---------- search autosuggest (titles + people) ---------- */
+  const suggestBox = $("#search-suggest");
+  const searchInput = $("#search-input");
+  let suggestItems = []; // flat list backing keyboard nav; each {type,value,el}
+  let suggestActive = -1;
+
+  const closeSuggest = () => {
+    suggestBox.hidden = true;
+    searchInput.setAttribute("aria-expanded", "false");
+    suggestItems = []; suggestActive = -1;
+  };
+
+  const runSearch = (text) => {
+    searchInput.value = text;
+    state.q = text.trim().toLowerCase();
+    const searching = state.q !== "";
+    document.body.classList.toggle("is-searching", searching);
+    $("#search-clear").hidden = !searching;
+    if (searching) window.scrollTo({ top: 0 });
+    renderGrid();
+    closeSuggest();
+  };
+
+  const renderSuggest = (raw) => {
+    const q = raw.trim().toLowerCase();
+    if (q.length < 2) return closeSuggest();
+
+    const words = (s) => s.toLowerCase().split(/\s+/);
+    const people = PEOPLE
+      .filter((p) => words(p.name).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q))
+      .sort((a, b) => b.count - a.count || b.bestRating - a.bestRating)
+      .slice(0, 5);
+    const titles = TITLES
+      .filter((t) => t.title.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const aStarts = a.title.toLowerCase().startsWith(q) ? 1 : 0;
+        const bStarts = b.title.toLowerCase().startsWith(q) ? 1 : 0;
+        return bStarts - aStarts || b.rating - a.rating;
+      })
+      .slice(0, 6);
+
+    if (!people.length && !titles.length) return closeSuggest();
+
+    suggestItems = [
+      ...people.map((p) => ({ type: "person", value: p.name })),
+      ...titles.map((t) => ({ type: "title", value: t.title, t })),
+    ];
+    suggestActive = -1;
+
+    const initials = (name) => name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    suggestBox.innerHTML =
+      (people.length ? `<p class="suggest-label">People</p>` +
+        people.map((p, i) => `
+          <button type="button" class="suggest-row" role="option" data-idx="${i}">
+            <span class="suggest-thumb" style="display:grid;place-items:center;font-size:0.72rem;font-weight:700;color:var(--text-faint)">${esc(initials(p.name))}</span>
+            <span class="suggest-meta">
+              <span class="suggest-name">${esc(p.name)}</span>
+              <span class="suggest-sub">${p.count} title${p.count === 1 ? "" : "s"}</span>
+            </span>
+          </button>`).join("") : "") +
+      (titles.length ? `<p class="suggest-label">Titles</p>` +
+        titles.map((t, i) => `
+          <button type="button" class="suggest-row" role="option" data-idx="${people.length + i}">
+            ${t.poster ? `<img class="suggest-poster" src="${esc(t.poster)}" alt="" loading="lazy">` : `<span class="suggest-poster"></span>`}
+            <span class="suggest-meta">
+              <span class="suggest-name">${esc(t.title)}</span>
+              <span class="suggest-sub">${t.year} · ★ ${t.rating.toFixed(1)}</span>
+            </span>
+          </button>`).join("") : "");
+
+    suggestBox.hidden = false;
+    searchInput.setAttribute("aria-expanded", "true");
+  };
+
+  suggestBox.addEventListener("mousedown", (e) => {
+    // mousedown (not click) fires before the input's blur, so the row is
+    // still in the DOM when we read it
+    const row = e.target.closest(".suggest-row");
+    if (!row) return;
+    e.preventDefault();
+    const item = suggestItems[Number(row.dataset.idx)];
+    if (!item) return;
+    runSearch(item.type === "person" ? item.value : item.value);
+    if (item.type === "title") openDetail(item.t);
+    ga("event", "search_suggest_click", { type: item.type, value: item.value });
+  });
+
+  const highlightSuggest = () => {
+    $$(".suggest-row", suggestBox).forEach((el, i) =>
+      el.classList.toggle("is-active", i === suggestActive));
+  };
+
   let qTimer;
   $("#search-input").addEventListener("input", (e) => {
+    renderSuggest(e.target.value);
     clearTimeout(qTimer);
     qTimer = setTimeout(() => {
       state.q = e.target.value.trim().toLowerCase();
@@ -733,6 +852,20 @@
   });
   let gaQTimer;
 
+  $("#search-input").addEventListener("keydown", (e) => {
+    if (suggestBox.hidden || !suggestItems.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); suggestActive = Math.min(suggestActive + 1, suggestItems.length - 1); highlightSuggest(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); suggestActive = Math.max(suggestActive - 1, 0); highlightSuggest(); }
+    else if (e.key === "Enter" && suggestActive >= 0) {
+      e.preventDefault();
+      const item = suggestItems[suggestActive];
+      runSearch(item.value);
+      if (item.type === "title") openDetail(item.t);
+    } else if (e.key === "Escape") { closeSuggest(); }
+  });
+  $("#search-input").addEventListener("blur", () => setTimeout(closeSuggest, 150));
+  $("#search-input").addEventListener("focus", (e) => { if (e.target.value.trim().length >= 2) renderSuggest(e.target.value); });
+
   $("#search-clear").addEventListener("click", () => {
     const inp = $("#search-input");
     inp.value = "";
@@ -740,6 +873,7 @@
     document.body.classList.remove("is-searching");
     $("#search-clear").hidden = true;
     renderGrid();
+    closeSuggest();
     inp.focus();
   });
 

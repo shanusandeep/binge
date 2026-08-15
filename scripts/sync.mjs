@@ -181,32 +181,47 @@ for (const t of found) {
 /* ---------- streaming platform (India) via TMDB watch providers ---------- */
 const PROVIDER_NORMALISE = {
   "Amazon Prime Video": "Prime Video", "Amazon Video": "Prime Video",
-  "Netflix basic with Ads": "Netflix",
+  "Netflix basic with Ads": "Netflix", "Netflix Standard with Ads": "Netflix",
   "Hotstar": "JioHotstar", "Disney Plus Hotstar": "JioHotstar",
   "JioCinema": "JioHotstar", "Jio Cinema": "JioHotstar",
   "Sony Liv": "SonyLIV", "Zee5": "ZEE5",
   "Amazon miniTV": "Amazon MX Player", "MX Player": "Amazon MX Player",
   "Apple TV Plus": "Apple TV+", "Apple TV": "Apple TV+",
+  "Disney Plus": "Disney+", "Paramount Plus": "Paramount+",
+  "Peacock Premium": "Peacock", "HBO Max": "Max",
 };
-/* Returns { name, kind: "stream" | "buy" } or null if TMDB has no India (or
-   US fallback) provider data at all. Subscription streaming (flatrate/ads/
+// TMDB tacks on distributor/tier suffixes ("HBO Max Amazon Channel",
+// "Paramount Plus Premium") that only add noise to a card label — strip
+// them before the exact-match table above, so those still normalise cleanly.
+const cleanProviderName = (raw) => {
+  const stripped = raw
+    .replace(/\s+Amazon Channels?$/i, "")
+    .replace(/\s+(Premium|Essential|Basic)$/i, "")
+    .trim();
+  return PROVIDER_NORMALISE[stripped] || PROVIDER_NORMALISE[raw] || stripped;
+};
+/* Reads a single TMDB /watch/providers response for BOTH regions at once
+   (no extra request) and returns { in, us }, each either null or
+   { name, kind: "stream" | "buy" }. Subscription streaming (flatrate/ads/
    free) is reported separately from rent/buy — conflating the two is what
    caused old catalog titles (Rocky 1976, Se7en, Casino Royale — rent/buy
    only in India) to get mislabeled as if they were still in theatres. */
-const indianPlatform = async (kind, id) => {
+const pickRegion = (region) => {
+  if (!region) return null;
+  const stream = region.flatrate?.[0] || region.ads?.[0] || region.free?.[0];
+  if (stream?.provider_name) return { name: cleanProviderName(stream.provider_name), kind: "stream" };
+  const buy = region.buy?.[0] || region.rent?.[0];
+  if (buy?.provider_name) return { name: cleanProviderName(buy.provider_name), kind: "buy" };
+  return null;
+};
+const regionPlatforms = async (kind, id) => {
   try {
     const d = await tmdb(`/${kind}/${id}/watch/providers`);
-    const region = d.results?.IN || d.results?.US;
-    if (!region) return null;
-    const stream = region.flatrate?.[0] || region.ads?.[0] || region.free?.[0];
-    if (stream?.provider_name)
-      return { name: PROVIDER_NORMALISE[stream.provider_name] || stream.provider_name, kind: "stream" };
-    const buy = region.buy?.[0] || region.rent?.[0];
-    if (buy?.provider_name)
-      return { name: PROVIDER_NORMALISE[buy.provider_name] || buy.provider_name, kind: "buy" };
-    return null;
-  } catch { return null; }
+    return { in: pickRegion(d.results?.IN), us: pickRegion(d.results?.US) };
+  } catch { return { in: null, us: null }; }
 };
+// back-compat shim: existing call sites only need the India side
+const indianPlatform = async (kind, id) => (await regionPlatforms(kind, id)).in;
 
 /* ---------- backfill: posters, IMDb ids, episodes, certifications ---------- */
 /* prefer the Indian CBFC certificate, fall back to US/GB */
@@ -219,9 +234,9 @@ const pickCert = (list) => {
   return null;
 };
 
-let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0, usPlatFilled = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && t.cert && t.released &&
+  if (t.poster && t.imdb && t.cert && t.released && t.usChecked &&
       !["Streaming", "Theatres"].includes(t.platform) && // re-check until OTT arrival
       (t.type === "movie" || t.episodes)) continue;
   try {
@@ -265,22 +280,29 @@ for (const t of existing.values()) {
       const rd = hit.release_date || hit.first_air_date;
       if (rd) { t.released = rd; relFilled++; }
     }
-    if (["Streaming", "Theatres"].includes(t.platform)) {
-      const plat = await indianPlatform(kind, hit.id);
+    if (!t.usChecked || ["Streaming", "Theatres"].includes(t.platform)) {
+      const { in: plat, us } = await regionPlatforms(kind, hit.id);
       if (plat?.kind === "stream") { t.platform = plat.name; platFilled++; }
       else if (plat?.kind === "buy") { t.platform = `${plat.name} (Buy/Rent)`; platFilled++; }
-      else {
-        // No provider info anywhere. "Theatres" is only a truthful label for
-        // a genuinely recent release still awaiting OTT — never stamp it on
-        // an old catalog title just because TMDB lacks India data for it.
+      else if (["Streaming", "Theatres"].includes(t.platform)) {
+        // No India provider info anywhere. "Theatres" is only a truthful
+        // label for a genuinely recent release still awaiting OTT — never
+        // stamp it on an old catalog title just because TMDB lacks data.
         const days = t.released ? (Date.now() - new Date(t.released).getTime()) / 864e5 : 9999;
         if (t.type === "movie" && days >= 0 && days <= 180) t.platform = "Theatres";
       }
+      // US availability, shown to US visitors in place of the India platform
+      // (JioHotstar/ZEE5/SonyLIV mean nothing outside India) — separate field
+      // so the India-facing majority of the catalogue is untouched.
+      if (us?.kind === "stream") { t.platformUs = us.name; usPlatFilled++; }
+      else if (us?.kind === "buy") { t.platformUs = `${us.name} (Buy/Rent)`; usPlatFilled++; }
+      else delete t.platformUs;
+      t.usChecked = true;
     }
   } catch { /* leave as-is — will retry next sync */ }
   await sleep(60); // stay well clear of TMDB's rate limit across ~100+ rechecks
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} platforms`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} IN platforms, ${usPlatFilled} US platforms`);
 
 /* ---------- seed iconic franchises ----------
    Collection expansion can only follow films we already hold, so seed the
@@ -437,7 +459,7 @@ for (const rows of byImdb.values()) {
     rows.sort((a, b) => score(b[1]) - score(a[1]) || a[1].title.length - b[1].title.length);
     const [keepKey, keep] = rows[0];
     for (const [dropKey, drop] of rows.slice(1)) {
-      for (const f of ["poster", "desc", "director", "cast", "cert", "runtime", "episodes", "seasons", "collection", "released", "tags"])
+      for (const f of ["poster", "desc", "director", "cast", "cert", "runtime", "episodes", "seasons", "collection", "released", "tags", "platformUs", "usChecked"])
         if (keep[f] == null || (Array.isArray(keep[f]) && !keep[f].length)) keep[f] = drop[f];
       existing.delete(dropKey);
       merged++;
@@ -494,6 +516,8 @@ const entry = (t) => {
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
+    ...(t.platformUs && { platformUs: t.platformUs }),
+    ...(t.usChecked && { usChecked: 1 }),
   };
   return "    " + JSON.stringify(o);
 };
