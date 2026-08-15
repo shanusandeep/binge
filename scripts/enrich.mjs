@@ -86,8 +86,10 @@ const wikiSearch = async (t) => {
     const d = await jfetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=8&format=json&origin=*`);
     // NEVER fall back to an unrelated first hit (that's how Kota Factory
     // once became the city of Kota) — the page title must contain the title
+    // startsWith, not includes — "Sitaare Zameen Par" otherwise swallows
+    // "Taare Zameen Par" since the shorter title sits inside the longer one
     for (const h of d.query?.search || [])
-      if (norm(h.title).includes(target) && !candidates.includes(h.title)) candidates.push(h.title);
+      if (norm(h.title).startsWith(target) && !candidates.includes(h.title)) candidates.push(h.title);
     if (candidates.length >= 3) break;
   }
   return candidates.slice(0, 3);

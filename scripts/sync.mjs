@@ -229,7 +229,16 @@ for (const t of existing.values()) {
     const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
     const d = await tmdb(`/search/${kind}`, params);
     const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const hit = (d.results || []).find((r) => norm(r.title || r.name).includes(norm(t.title).slice(0, 14)));
+    // strict prefix match in EITHER direction — a plain .includes() let
+    // "Sitaare Zameen Par" swallow "Taare Zameen Par" (and Rambo III / Rambo)
+    // because the substring happened to appear inside the longer title
+    const nt = norm(t.title);
+    const hit = (d.results || []).find((r) => {
+      const nr = norm(r.title || r.name);
+      if (!(nr === nt || nr.startsWith(nt) || nt.startsWith(nr))) return false;
+      const ry = Number((r.release_date || r.first_air_date || "").slice(0, 4));
+      return !ry || Math.abs(ry - t.year) <= 1; // TMDB's year param isn't strictly enforced
+    });
     if (!hit) continue;
     if (!t.poster && hit.poster_path) {
       t.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path}`;
@@ -401,6 +410,45 @@ for (const t of existing.values()) {
   if (tags.size !== before) { t.tags = [...tags]; universeTagged++; }
 }
 console.log(`● universe tags: ${universeTagged} titles tagged Marvel/DC`);
+
+/* ---------- de-dup by IMDb id ----------
+   The title-matching used to be loose enough that TMDB re-titling a show
+   between syncs (Operation Safed Sagar's subtitle changed) — or a stray
+   fuzzy-match false positive (Taare Zameen Par ⊂ Sitaare Zameen Par) —
+   could attach the same IMDb id to two different rows, or the wrong id to
+   two genuinely different films. Same year + same id = one release, listed
+   twice → merge. Different year + same id = the id was mis-assigned to at
+   least one of them → clear it from both so the next run re-resolves each
+   independently under the now-stricter matcher above. */
+const byImdb = new Map();
+for (const [key, t] of existing) {
+  if (!t.imdb) continue;
+  if (!byImdb.has(t.imdb)) byImdb.set(t.imdb, []);
+  byImdb.get(t.imdb).push([key, t]);
+}
+let merged = 0, clearedMismatch = 0;
+for (const rows of byImdb.values()) {
+  if (rows.length < 2) continue;
+  const sameYear = rows.every(([, t]) => t.year === rows[0][1].year);
+  if (sameYear) {
+    // keep the most complete row, folding in any field only the others have
+    const score = (t) => ["poster", "desc", "director", "cast", "cert", "runtime", "episodes", "collection"]
+      .reduce((n, f) => n + (t[f] && (!Array.isArray(t[f]) || t[f].length) ? 1 : 0), 0);
+    rows.sort((a, b) => score(b[1]) - score(a[1]) || a[1].title.length - b[1].title.length);
+    const [keepKey, keep] = rows[0];
+    for (const [dropKey, drop] of rows.slice(1)) {
+      for (const f of ["poster", "desc", "director", "cast", "cert", "runtime", "episodes", "seasons", "collection", "released", "tags"])
+        if (keep[f] == null || (Array.isArray(keep[f]) && !keep[f].length)) keep[f] = drop[f];
+      existing.delete(dropKey);
+      merged++;
+    }
+  } else {
+    for (const [, t] of rows) delete t.imdb;
+    clearedMismatch += rows.length;
+  }
+}
+if (merged || clearedMismatch)
+  console.log(`● de-dup: ${merged} duplicate rows merged, ${clearedMismatch} mismatched imdb ids cleared for re-resolution`);
 
 /* ---------- true IMDb ratings from IMDb's official daily dataset ----------
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
