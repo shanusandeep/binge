@@ -304,6 +304,8 @@ const entry = (t) => {
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
+    ...(t.platformUs && { platformUs: t.platformUs }),
+    ...(t.usChecked && { usChecked: 1 }),
   };
   return "    " + JSON.stringify(o);
 };
