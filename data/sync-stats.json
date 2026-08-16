@@ -1,7 +1,7 @@
 {
   "sync": {
-    "at": "2026-08-16T06:17:43.162Z",
-    "durationSec": 344,
+    "at": "2026-08-16T06:23:13.144Z",
+    "durationSec": 356,
     "added": 7,
     "refreshed": 4,
     "total": 933,
@@ -12,10 +12,10 @@
     }
   },
   "enrich": {
-    "at": "2026-08-16T07:15:02.889Z",
+    "at": "2026-08-16T07:21:30.531Z",
     "calls": {
-      "wikipedia": 879,
-      "wikidata": 235,
+      "wikipedia": 878,
+      "wikidata": 250,
       "gemini": 15
     }
   }
