@@ -932,6 +932,7 @@ body.is-watchlist .card.is-watched .poster::before { filter: none; }
 .auth-forgot-row .auth-link { font-size: 0.8rem; color: var(--text-dim); }
 .auth-forgot-row .auth-link:hover { color: var(--saffron); }
 .account-menu .btn-ghost { display: block; width: 100%; text-align: left; padding: 8px 4px; }
+.account-menu .btn-ghost[hidden] { display: none; }
 .auth-submit { width: 100%; }
 .auth-switch { font-size: 0.85rem; color: var(--text-dim); text-align: center; }
 .auth-link {
