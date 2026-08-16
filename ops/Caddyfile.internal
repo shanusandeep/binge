@@ -3,6 +3,8 @@
 :80 {
 	root * /srv/www
 	encode zstd gzip
+	# admin dashboard is its own page, not the SPA shell
+	rewrite /admin /admin.html
 	# SPA routes (/recent, /all-time, …) all serve the app shell
 	try_files {path} /index.html
 	file_server

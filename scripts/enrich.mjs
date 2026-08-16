@@ -29,8 +29,19 @@ const UA = { "User-Agent": "binge.shanuva.com catalogue bot (personal project)" 
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// External-call tally by host, merged into data/sync-stats.json for the
+// admin dashboard (sync.mjs owns the file; we own the `enrich` section).
+const CALLS = { wikipedia: 0, wikidata: 0, gemini: 0 };
+const tally = (url) => {
+  const h = String(url);
+  if (h.includes("wikipedia.org")) CALLS.wikipedia++;
+  else if (h.includes("wikidata.org")) CALLS.wikidata++;
+  else if (h.includes("generativelanguage")) CALLS.gemini++;
+};
+
 const jfetch = async (url, opts = {}, tries = 5) => {
   for (let i = 0; i < tries; i++) {
+    tally(url);
     const res = await fetch(url, { headers: UA, ...opts });
     if (res.ok) return res.json();
     if ((res.status === 429 || res.status >= 500) && i < tries - 1) {
@@ -310,6 +321,14 @@ ${db.titles.map(entry).join(",\n")}
 };
 `;
 await writeFile(DB_FILE, out, "utf8");
+
+const STATS_FILE = path.join(ROOT, "data", "sync-stats.json");
+let prevStats = {};
+try { prevStats = JSON.parse(await readFile(STATS_FILE, "utf8")); } catch { /* first run */ }
+await writeFile(STATS_FILE, JSON.stringify({
+  ...prevStats,
+  enrich: { at: new Date().toISOString(), calls: CALLS },
+}, null, 2) + "\n", "utf8");
 
 const have = (f) => db.titles.filter((t) => t[f] && (!Array.isArray(t[f]) || t[f].length)).length;
 console.log(`✓ Enriched ${db.titles.length} titles → data/titles.js`);

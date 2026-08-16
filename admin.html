@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Binge — Control Room</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230D0B09'/><text x='50' y='72' font-size='62' text-anchor='middle' fill='%23FFB43A' font-family='Georgia'>B</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:wght@300;400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin.css?v=1" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- shown until /api/me confirms an admin session -->
+  <div class="gate" id="gate">
+    <div class="gate-card" id="gate-card">
+      <span class="gate-reel" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="44" height="44"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="1.8" fill="currentColor"/><circle cx="12" cy="17" r="1.8" fill="currentColor"/><circle cx="7" cy="12" r="1.8" fill="currentColor"/><circle cx="17" cy="12" r="1.8" fill="currentColor"/></svg>
+      </span>
+      <p class="gate-status" id="gate-status">Checking projection-booth access…</p>
+      <a class="gate-back" href="/">← Back to Binge</a>
+    </div>
+  </div>
+
+  <div class="shell" id="shell" hidden>
+    <aside class="side">
+      <a class="side-brand" href="/">
+        <span class="side-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="1.8" fill="currentColor"/><circle cx="12" cy="17" r="1.8" fill="currentColor"/><circle cx="7" cy="12" r="1.8" fill="currentColor"/><circle cx="17" cy="12" r="1.8" fill="currentColor"/></svg>
+        </span>
+        <span class="side-word">Binge<i>.</i><em>control room</em></span>
+      </a>
+
+      <nav class="side-nav" id="side-nav" aria-label="Admin sections">
+        <a href="#overview" data-sec="overview">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+          Overview</a>
+        <a href="#users" data-sec="users">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c.6-3.8 3.2-6 6.5-6s5.9 2.2 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.6 14.3c2.9.2 5.1 2.1 5.7 5.2"/></svg>
+          Users</a>
+        <a href="#sync" data-sec="sync">
+          <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M20 4v4h-4M4 20v-4h4"/></svg>
+          Sync</a>
+        <a href="#integrations" data-sec="integrations">
+          <svg viewBox="0 0 24 24"><path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4"/></svg>
+          Integrations</a>
+      </nav>
+
+      <div class="side-foot">
+        <div class="side-user" id="side-user"></div>
+        <a class="side-exit" href="/">← Back to site</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="sec" id="sec-overview" hidden>
+        <header class="sec-head">
+          <h1>Overview</h1>
+          <p class="sec-sub" id="overview-sub">The whole booth at a glance.</p>
+        </header>
+        <div class="sec-body" id="overview-body"><p class="loading">Loading…</p></div>
+      </section>
+
+      <section class="sec" id="sec-users" hidden>
+        <header class="sec-head">
+          <h1>Users</h1>
+          <p class="sec-sub">Every registered account. Promote trusted people to admin — the booth always keeps at least one projectionist.</p>
+        </header>
+        <div class="users-tools">
+          <input type="search" id="user-search" placeholder="Search name or email…" autocomplete="off" />
+          <span class="users-count" id="users-count"></span>
+        </div>
+        <div class="sec-body" id="users-body"><p class="loading">Loading…</p></div>
+      </section>
+
+      <section class="sec" id="sec-sync" hidden>
+        <header class="sec-head">
+          <h1>Sync</h1>
+          <p class="sec-sub">The 7:00 IST daily catalogue pipeline — TMDB discovery, IMDb ratings, Wikipedia &amp; Gemini enrichment.</p>
+          <button class="btn-run" id="btn-run-sync">⟳ Run sync now</button>
+        </header>
+        <div class="sec-body" id="sync-body"><p class="loading">Loading…</p></div>
+      </section>
+
+      <section class="sec" id="sec-integrations" hidden>
+        <header class="sec-head">
+          <h1>Integrations</h1>
+          <p class="sec-sub">Every external system the site leans on — where it runs, how much we call it, and how much headroom is left.</p>
+        </header>
+        <div class="sec-body" id="tech-body"><p class="loading">Loading…</p></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="data/titles.js?v=19"></script>
+  <script src="js/admin.js?v=1"></script>
+</body>
+</html>

@@ -43,6 +43,11 @@ const PAGES = 3;               // TMDB pages per discover query
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// External-call tally, published to data/sync-stats.json at the end of the
+// run so the admin dashboard can show real pipeline usage per service.
+const RUN_T0 = Date.now();
+const CALLS = { tmdb: 0, omdb: 0, imdbDataset: 0 };
+
 // Backfill re-checks 100+ titles a run with several calls each — without
 // retry, a single transient 429/5xx silently aborts that title's update for
 // the whole run (this is why Cocktail 2's Netflix arrival got missed: the
@@ -52,6 +57,7 @@ const tmdb = async (p, params = {}, tries = 4) => {
   url.searchParams.set("api_key", TMDB_KEY);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   for (let i = 0; i < tries; i++) {
+    CALLS.tmdb++;
     const res = await fetch(url);
     if (res.ok) return res.json();
     if ((res.status === 429 || res.status >= 500) && i < tries - 1) {
@@ -145,6 +151,7 @@ const omdbRating = async (t) => {
   url.searchParams.set("t", t.title);
   url.searchParams.set("y", String(t.year));
   try {
+    CALLS.omdb++;
     const d = await (await fetch(url)).json();
     const r = parseFloat(d.imdbRating);
     return Number.isFinite(r) ? r : null;
@@ -476,6 +483,7 @@ if (merged || clearedMismatch)
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
    for every tt id we hold. Overrides TMDB approximations everywhere. */
 try {
+  CALLS.imdbDataset++;
   const res = await fetch("https://datasets.imdbws.com/title.ratings.tsv.gz");
   if (!res.ok) throw new Error(`dataset ${res.status}`);
   const tsv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
@@ -535,4 +543,20 @@ ${titles.map(entry).join(",\n")}
 };
 `;
 await writeFile(DB_FILE, out, "utf8");
+
+/* publish run stats for the admin dashboard — keep the previous enrich
+   section (enrich.mjs runs after us and overwrites its own section) */
+const STATS_FILE = path.join(ROOT, "data", "sync-stats.json");
+let prevStats = {};
+try { prevStats = JSON.parse(await readFile(STATS_FILE, "utf8")); } catch { /* first run */ }
+await writeFile(STATS_FILE, JSON.stringify({
+  ...prevStats,
+  sync: {
+    at: new Date().toISOString(),
+    durationSec: Math.round((Date.now() - RUN_T0) / 1000),
+    added, refreshed, total: titles.length,
+    calls: CALLS,
+  },
+}, null, 2) + "\n", "utf8");
+
 console.log(`✓ Sync complete — ${added} added, ${refreshed} ratings refreshed, ${titles.length} total → data/titles.js`);

@@ -41,7 +41,7 @@ jobs:
         run: |
           git config user.name "binge-bot"
           git config user.email "actions@github.com"
-          git add data/titles.js
+          git add data/titles.js data/sync-stats.json
           git diff --cached --quiet || git commit -m "chore: daily catalogue sync"
           # the job runs ~1h — main may have moved; rebase our data commit on
           # top (ours-vs-theirs: keep the freshly synced catalogue on conflict)
