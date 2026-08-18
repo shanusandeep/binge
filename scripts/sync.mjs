@@ -75,6 +75,40 @@ const db = (0, eval)("(" + jsonText + ")"); // our own file, structured as an ob
 const existing = new Map(db.titles.map((t) => [`${t.title.toLowerCase()}|${t.year}`, t]));
 console.log(`● Loaded ${existing.size} existing titles`);
 
+/* ---------- IMDb's official daily dataset ----------
+   https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact rating
+   + real vote count for every tt id. Loaded once, used twice:
+   (1) below, as a safety net on the TMDB discovery gate — TMDB's own
+       vote_count badly under-represents small-audience Hindi theatrical/
+       OTT releases (a film can carry 7,000+ real IMDb votes while sitting
+       at TMDB vote_count 1-4 for months, so it never clears minVotes() and
+       never gets discovered at all — this is how titles like Bharat
+       Bhhagya Viddhaata, Aakhri Sawal and Governor went missing even
+       though they're genuinely popular). If TMDB's count is too thin to
+       trust but IMDb shows real audience interest, let the title through.
+   (2) later in this file, to overwrite TMDB's approximate ratings with
+       IMDb's exact ones for every title (new or existing) that has an
+       imdb id. */
+const IMDB_VOTE_OVERRIDE = 200;
+const imdbData = new Map(); // tconst -> { rating, votes }
+try {
+  CALLS.imdbDataset++;
+  const res = await fetch("https://datasets.imdbws.com/title.ratings.tsv.gz");
+  if (!res.ok) throw new Error(`dataset ${res.status}`);
+  const tsv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
+  for (const line of tsv.split("\n")) {
+    const t1 = line.indexOf("\t");
+    if (t1 < 0) continue;
+    const t2 = line.indexOf("\t", t1 + 1);
+    const rating = Number(line.slice(t1 + 1, t2));
+    const votes = Number(line.slice(t2 + 1));
+    if (rating >= 1 && rating <= 10) imdbData.set(line.slice(0, t1), { rating, votes });
+  }
+  console.log(`● IMDb dataset loaded: ${imdbData.size} rated titles`);
+} catch (e) {
+  console.warn(`⚠ IMDb dataset unavailable (${e.message}) — discovery gate and rating refresh both skip it this run`);
+}
+
 /* ---------- genre maps ---------- */
 const [gm, gt] = await Promise.all([tmdb("/genre/movie/list"), tmdb("/genre/tv/list")]);
 const GENRE_BY_ID = new Map([...gm.genres, ...gt.genres].map((g) => [g.id, g.name]));
@@ -120,12 +154,18 @@ for (const [kind, params] of queries) {
     const date = r.release_date || r.first_air_date || "";
     const year = Number(date.slice(0, 4));
     const lang = r.original_language === "hi" ? "hi" : "en";
-    if (!title || !year || r.vote_count < minVotes(lang, kind, date)) continue;
+    if (!title || !year) continue;
     let imdb = null;
     try {
       const ext = await tmdb(`/${kind}/${r.id}/external_ids`);
       if (/^tt\d+$/.test(ext.imdb_id || "")) imdb = ext.imdb_id;
     } catch { /* fine — enrich can find it later */ }
+    // TMDB's own vote_count is the primary signal, but it's unreliable for
+    // small-audience Hindi releases — fall back to IMDb's real vote count
+    // before giving up on a title TMDB itself barely got any votes on.
+    const passesTmdb = r.vote_count >= minVotes(lang, kind, date);
+    const passesImdb = imdb && (imdbData.get(imdb)?.votes ?? 0) >= IMDB_VOTE_OVERRIDE;
+    if (!passesTmdb && !passesImdb) continue;
     found.push({
       ...(imdb && { imdb }),
       title,
@@ -202,7 +242,7 @@ const PROVIDER_NORMALISE = {
 // them before the exact-match table above, so those still normalise cleanly.
 const cleanProviderName = (raw) => {
   const stripped = raw
-    .replace(/\s+Amazon Channels?$/i, "")
+    .replace(/\s+(Amazon|Apple TV|Roku Premium)\s+Channels?$/i, "")
     .replace(/\s+(Premium|Essential|Basic)$/i, "")
     .trim();
   return PROVIDER_NORMALISE[stripped] || PROVIDER_NORMALISE[raw] || stripped;
@@ -479,28 +519,18 @@ for (const rows of byImdb.values()) {
 if (merged || clearedMismatch)
   console.log(`● de-dup: ${merged} duplicate rows merged, ${clearedMismatch} mismatched imdb ids cleared for re-resolution`);
 
-/* ---------- true IMDb ratings from IMDb's official daily dataset ----------
-   https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact scores
-   for every tt id we hold. Overrides TMDB approximations everywhere. */
-try {
-  CALLS.imdbDataset++;
-  const res = await fetch("https://datasets.imdbws.com/title.ratings.tsv.gz");
-  if (!res.ok) throw new Error(`dataset ${res.status}`);
-  const tsv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
-  const wanted = new Map();
-  for (const t of existing.values()) if (t.imdb) wanted.set(t.imdb, t);
-  let imdbExact = 0;
-  for (const line of tsv.split("\n")) {
-    const tab = line.indexOf("\t");
-    if (tab < 0) continue;
-    const t = wanted.get(line.slice(0, tab));
-    if (!t) continue;
-    const rating = Number(line.slice(tab + 1, line.indexOf("\t", tab + 1)));
-    if (rating >= 1 && rating <= 10 && rating !== t.rating) { t.rating = rating; imdbExact++; }
+/* ---------- true IMDb ratings, from the dataset loaded at the top ----------
+   Overrides TMDB approximations everywhere, for titles old and brand new. */
+{
+  let imdbExact = 0, matched = 0;
+  for (const t of existing.values()) {
+    if (!t.imdb) continue;
+    const hit = imdbData.get(t.imdb);
+    if (!hit) continue;
+    matched++;
+    if (hit.rating !== t.rating) { t.rating = hit.rating; imdbExact++; }
   }
-  console.log(`● IMDb dataset: ${imdbExact} ratings set to exact IMDb scores (${wanted.size} ids matched against)`);
-} catch (e) {
-  console.warn(`⚠ IMDb dataset unavailable (${e.message}) — keeping existing ratings`);
+  console.log(`● IMDb dataset: ${imdbExact} ratings set to exact IMDb scores (${matched} ids matched against)`);
 }
 
 /* ---------- write ---------- */
