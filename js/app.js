@@ -13,6 +13,7 @@
 
   const LS_GENRES = "binge.favGenres";
   const LS_SEEN = "binge.onboarded";
+  const LS_THEME = "binge.theme";
   const MAX_FAV = 4;
 
   /* ---------- state ---------- */
@@ -31,6 +32,29 @@
   /* ---------- els ---------- */
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+  /* ---------- theme (system by default, user can override) ---------- */
+  const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21.5" y2="12"/><line x1="4.9" y1="4.9" x2="6.6" y2="6.6"/><line x1="17.4" y1="17.4" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="6.6" y2="17.4"/><line x1="17.4" y1="6.6" x2="19.1" y2="4.9"/></g></svg>`;
+  const ICON_MOON = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const systemPrefersLight = () => matchMedia("(prefers-color-scheme: light)").matches;
+  const effectiveTheme = () => localStorage.getItem(LS_THEME) || (systemPrefersLight() ? "light" : "dark");
+  const themeBtn = $("#btn-theme");
+  const paintThemeBtn = () => {
+    const eff = effectiveTheme();
+    themeBtn.innerHTML = eff === "light" ? ICON_MOON : ICON_SUN;
+    themeBtn.title = eff === "light" ? "Switch to dark theme" : "Switch to light theme";
+    themeBtn.setAttribute("aria-label", themeBtn.title);
+  };
+  paintThemeBtn();
+  themeBtn.addEventListener("click", () => {
+    const next = effectiveTheme() === "light" ? "dark" : "light";
+    localStorage.setItem(LS_THEME, next);
+    document.documentElement.setAttribute("data-theme", next);
+    paintThemeBtn();
+  });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+    if (!localStorage.getItem(LS_THEME)) paintThemeBtn();
+  });
 
   const grid = $("#grid");
   const emptyState = $("#empty-state");

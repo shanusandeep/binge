@@ -9,6 +9,7 @@
   --bg: #0d0b09;
   --bg-2: #14110d;
   --bg-3: #1c1712;
+  --bg-top: #14100b;
   --line: #2a231b;
   --line-soft: #211b14;
   --text: #f2e9dc;
@@ -18,11 +19,58 @@
   --saffron-deep: #e08f00;
   --chili: #e8503a;
   --imdb: #f5c518;
+  --imdb-text: var(--imdb);
   --good: #7ec46a;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a3968a' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   --font-display: "Rozha One", Georgia, serif;
   --font-body: "Hanken Grotesk", "Segoe UI", sans-serif;
   --r-card: 14px;
   --shadow-card: 0 18px 40px -18px rgba(0, 0, 0, 0.8);
+}
+
+/* ---------- light theme ----------
+   Dark is the site's native look (bare :root, above) — light is an
+   opt-in alternative, not a design afterthought: same warm marigold/
+   chili identity, just on parchment paper instead of espresso black.
+   Deepened the accent hues (saffron/chili) here since the bright
+   dark-mode values read fine on black but fail contrast as text on
+   cream; --imdb and --good stay put since they're only ever used as
+   solid button/badge fills, never as text on the page background. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #faf3e6;
+    --bg-2: #f2e8d5;
+    --bg-3: #ebdec2;
+    --bg-top: #fffdf7;
+    --line: #ddcaa3;
+    --line-soft: #e8dabb;
+    --text: #241a0f;
+    --text-dim: #5c4c34;
+    --text-faint: #8a7757;
+    --saffron: #9c5800;
+    --saffron-deep: #7a4200;
+    --chili: #c23a22;
+    --imdb-text: #7a5a05;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235c4c34' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    --shadow-card: 0 18px 40px -18px rgba(70, 50, 20, 0.28);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #faf3e6;
+  --bg-2: #f2e8d5;
+  --bg-3: #ebdec2;
+  --bg-top: #fffdf7;
+  --line: #ddcaa3;
+  --line-soft: #e8dabb;
+  --text: #241a0f;
+  --text-dim: #5c4c34;
+  --text-faint: #8a7757;
+  --saffron: #9c5800;
+  --saffron-deep: #7a4200;
+  --chili: #c23a22;
+  --imdb-text: #7a5a05;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235c4c34' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  --shadow-card: 0 18px 40px -18px rgba(70, 50, 20, 0.28);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -37,11 +85,12 @@ body {
   line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
   background-image:
     radial-gradient(1100px 520px at 85% -10%, rgba(255, 180, 58, 0.16), transparent 60%),
     radial-gradient(900px 460px at -10% 18%, rgba(232, 80, 58, 0.10), transparent 55%),
     radial-gradient(1000px 600px at 50% 105%, rgba(255, 180, 58, 0.07), transparent 60%),
-    linear-gradient(180deg, #14100b 0%, var(--bg) 30%);
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 30%);
 }
 
 ::selection { background: var(--saffron); color: #140d02; }
@@ -93,6 +142,20 @@ body {
 .logo-dot { color: var(--saffron); }
 
 .header-actions { display: flex; align-items: center; gap: 12px; }
+
+.btn-theme {
+  display: inline-grid; place-items: center;
+  width: 36px; height: 36px;
+  color: var(--text-dim);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: color 0.15s, border-color 0.2s, transform 0.15s;
+}
+.btn-theme:hover { color: var(--saffron); border-color: var(--saffron-deep); transform: rotate(12deg); }
+.btn-theme svg { display: block; }
 
 /* quick-view links — styled as proper pill controls, not loose text */
 .top-nav { display: flex; align-items: center; gap: 8px; margin-right: auto; margin-left: 26px; }
@@ -457,7 +520,7 @@ body {
   outline: none;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a3968a' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: var(--select-arrow);
   background-repeat: no-repeat;
   background-position: right 14px center;
   padding-right: 32px;
@@ -466,7 +529,7 @@ body {
 .select-rating.is-set {
   background-color: rgba(245, 197, 24, 0.16);
   border-color: var(--imdb);
-  color: var(--imdb);
+  color: var(--imdb-text);
 }
 
 /* toggle */
@@ -500,7 +563,7 @@ body {
   background: var(--imdb);
 }
 .toggle-label { font-size: 0.85rem; font-weight: 600; color: var(--text-dim); }
-.toggle input:checked ~ .toggle-label { color: var(--imdb); }
+.toggle input:checked ~ .toggle-label { color: var(--imdb-text); }
 .toggle-label b { font-weight: 800; }
 
 .btn-clear {
