@@ -65,10 +65,7 @@
     Family: 95, Fantasy: 270, Animation: 175,
   };
 
-  const allGenres = [...new Set(TITLES.flatMap((t) => t.genres))].sort(
-    (a, b) => TITLES.filter((t) => t.genres.includes(b)).length -
-              TITLES.filter((t) => t.genres.includes(a)).length
-  );
+  const allGenres = [...new Set(TITLES.flatMap((t) => t.genres))].sort((a, b) => a.localeCompare(b));
 
   /* ---------- people index (for search autosuggest) ---------- */
   const PEOPLE = (() => {
