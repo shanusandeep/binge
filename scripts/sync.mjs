@@ -140,10 +140,15 @@ const queries = [
   ...Array.from({ length: 3 }, (_, i) => ["tv", { with_original_language: "hi", sort_by: "vote_count.desc", page: i + 1 }]),
   // Kids & family — 16=Animation, 10751=Family; these rarely surface in the
   // popularity/rating sweeps above, so ask for them explicitly (all-time,
-  // not just recent, since family favourites are evergreen)
-  ...Array.from({ length: 2 }, (_, i) => ["movie", { with_genres: "16,10751", sort_by: "vote_count.desc", "vote_count.gte": 400, page: i + 1 }]),
-  ...Array.from({ length: 2 }, (_, i) => ["movie", { with_genres: "16,10751", with_original_language: "hi", sort_by: "popularity.desc", page: i + 1 }]),
-  ["tv", { with_genres: "16,10751", sort_by: "vote_count.desc", "vote_count.gte": 200, page: 1 }],
+  // not just recent, since family favourites are evergreen).
+  // NOTE: TMDB's with_genres uses comma for AND, pipe for OR — "16,10751"
+  // (Animation AND Family) silently excluded every live-action family film
+  // that isn't also tagged Animation (Stuart Little, the 2019 live-action
+  // Dumbo remake, Paddington, Home Alone…). "16|10751" (Animation OR
+  // Family) is what "kids & family" actually means here.
+  ...Array.from({ length: 15 }, (_, i) => ["movie", { with_genres: "16|10751", sort_by: "vote_count.desc", "vote_count.gte": 400, page: i + 1 }]),
+  ...Array.from({ length: PAGES }, (_, i) => ["movie", { with_genres: "16|10751", with_original_language: "hi", sort_by: "popularity.desc", page: i + 1 }]),
+  ...Array.from({ length: 2 }, (_, i) => ["tv", { with_genres: "16|10751", sort_by: "vote_count.desc", "vote_count.gte": 200, page: i + 1 }]),
 ];
 
 const found = [];
