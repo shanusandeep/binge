@@ -63,6 +63,8 @@
   const forYouSection = $("#foryou-section");
   const forYouRail = $("#foryou-rail");
   const forYouNote = $("#foryou-note");
+  const thisWeekSection = $("#thisweek-section");
+  const thisWeekRail = $("#thisweek-rail");
   const modalVeil = $("#modal-veil");
   const modalGenres = $("#modal-genres");
   const modalSave = $("#modal-save");
@@ -143,6 +145,10 @@
     (t.genres.includes("Animation") || t.genres.includes("Family")) &&
     ageBucket(t.cert) !== "a";
 
+  const daysAgo = (d) => (Date.now() - new Date(d + "T00:00:00").getTime()) / 864e5;
+  /* just released — no IMDb score yet, so the rating bar mustn't hide it */
+  const isFresh = (t) => !!t.released && daysAgo(t.released) <= 30;
+
   const yearMatch = (t) => {
     const y = t.year, f = state.year;
     if (f === "all") return true;
@@ -178,7 +184,7 @@
       : TITLES.filter((t) =>
           (state.type === "all" || t.type === state.type) &&
           (state.lang === "all" || t.lang === state.lang) &&
-          (!state.minRating || t.rating >= state.minRating) &&
+          (!state.minRating || t.rating >= state.minRating || (!t.rating && isFresh(t))) &&
           (state.age === "all" ||
             (state.age === "kids" ? isKids(t) : ageBucket(t.cert) === state.age)) &&
           yearMatch(t) &&
@@ -259,10 +265,12 @@
   const regionPlatform = (t) =>
     (!isIndiaTZ && t.platformUs) ? t.platformUs : t.platform;
 
-  const cardHTML = (t, i) => {
+  const cardHTML = (t, i, tagArg) => {
+    const tag = typeof tagArg === "string" ? tagArg : ""; // .map() hands us the array as arg 3
     const langTag = t.lang === "hi" ? "हिंदी" : "English";
     const typeTag = t.type === "movie" ? "Film" : "Series";
-    const topBadge = t.rating >= 8.5 ? `<span class="badge-top">All-time great</span>` : "";
+    const topBadge = tag ? `<span class="badge-top">${esc(tag)}</span>`
+      : t.rating >= 8.5 ? `<span class="badge-top">All-time great</span>` : "";
     const glyph = t.title.trim()[0].toUpperCase();
     const img = t.poster
       ? `<img class="poster-img" src="${esc(t.poster)}" alt="" loading="lazy" onerror="this.remove();this.closest('.poster').classList.remove('has-img')">`
@@ -273,7 +281,9 @@
       <div class="poster ${t.poster ? "has-img" : ""}" style="--poster-bg:${posterBg(t).replace(/\n\s*/g, " ")}">
         ${img}
         <span class="poster-glyph" aria-hidden="true">${glyph}</span>
-        <a class="badge-rating" href="${imdbURL(t)}" target="_blank" rel="noopener" title="Open on IMDb" aria-label="IMDb rating ${t.rating.toFixed(1)} — open on IMDb">${IMDB_SVG}${t.rating.toFixed(1)}</a>
+        ${t.rating
+          ? `<a class="badge-rating" href="${imdbURL(t)}" target="_blank" rel="noopener" title="Open on IMDb" aria-label="IMDb rating ${t.rating.toFixed(1)} — open on IMDb">${IMDB_SVG}${t.rating.toFixed(1)}</a>`
+          : `<span class="badge-rating badge-new" title="Just released — not rated yet">New</span>`}
         ${topBadge}
         ${isWatched ? `<span class="watched-badge">✓ Watched</span>` : ""}
         <h3 class="poster-word">${esc(t.title)}</h3>
@@ -430,6 +440,28 @@
     forYouRail.innerHTML = picks.map(cardHTML).join("");
   };
 
+  /* ---------- render: new-this-week rail ----------
+     brand-new films/series by release date, plus running series that
+     aired an episode in the window (lastAired, refreshed nightly) */
+  const renderThisWeek = () => {
+    const WINDOW = 10;
+    const inWindow = (d) => !!d && daysAgo(d) >= -1 && daysAgo(d) <= WINDOW;
+    const picks = TITLES
+      .map((t) => {
+        if (inWindow(t.released))
+          return { t, on: t.released, tag: t.type === "movie" ? "New release" : "New series" };
+        if (t.type === "series" && inWindow(t.lastAired))
+          return { t, on: t.lastAired, tag: "New episodes" };
+        return null;
+      })
+      .filter((p) => p && !watchedSet.has(titleKey(p.t)))
+      .sort((a, b) => b.on.localeCompare(a.on) || b.t.rating - a.t.rating)
+      .slice(0, 14);
+    thisWeekSection.hidden = !picks.length;
+    if (!picks.length) return;
+    thisWeekRail.innerHTML = picks.map((p, i) => cardHTML(p.t, i, p.tag)).join("");
+  };
+
   /* ---------- render: hero ---------- */
   const renderHero = () => {
     const movies = TITLES.filter((t) => t.type === "movie").length;
@@ -496,9 +528,11 @@
     const epInfo = t.episodes
       ? (t.seasons > 1 ? `${t.seasons} seasons · ${t.episodes} episodes` : `${t.episodes} episodes`)
       : null;
+    /* every name is a link: click → all titles with that person */
+    const person = (name) => `<button type="button" class="credit-link" data-person="${esc(name)}">${esc(name)}</button>`;
     $("#detail-credits").innerHTML =
-      (t.director ? `<dt>Director</dt><dd>${esc(t.director)}</dd>` : "") +
-      (t.cast?.length ? `<dt>Cast</dt><dd>${t.cast.map(esc).join(", ")}</dd>` : "") +
+      (t.director ? `<dt>Director</dt><dd>${t.director.split(",").map((s) => s.trim()).filter(Boolean).map(person).join(", ")}</dd>` : "") +
+      (t.cast?.length ? `<dt>Cast</dt><dd>${t.cast.map(person).join(", ")}</dd>` : "") +
       (epInfo ? `<dt>Episodes</dt><dd>${epInfo}</dd>` : "") +
       (t.tags?.length ? `<dt>Studio</dt><dd>${t.tags.map(esc).join(", ")}</dd>` : "");
     const watch = $("#detail-watch");
@@ -510,7 +544,7 @@
     }
     const link = $("#detail-imdb");
     link.href = imdbURL(t);
-    $("#detail-imdb-rating").textContent = t.rating.toFixed(1) + " / 10";
+    $("#detail-imdb-rating").textContent = t.rating ? t.rating.toFixed(1) + " / 10" : "Not rated yet";
     const platEl = $("#detail-platform");
     platEl.textContent = regionPlatform(t);
     const platUrl = platformURL(t);
@@ -542,7 +576,7 @@
     ga("event", "mark_watched", { item_name: currentDetail.title, watched: on });
     updateWatchedBtn(currentDetail);
     renderGrid();
-    renderForYou();
+    renderForYou(); renderThisWeek();
     try {
       await fetch("/api/watched", {
         method: "POST",
@@ -579,7 +613,7 @@
     watchedSet.clear();
     refreshAccount();
     renderGrid();
-    renderForYou();
+    renderForYou(); renderThisWeek();
     if (currentDetail) updateWatchedBtn(currentDetail);
   });
   $("#btn-watchlist").addEventListener("click", () => showWatchlist());
@@ -600,7 +634,7 @@
     (d.watched || []).forEach((k) => watchedSet.add(k));
     refreshAccount();
     renderGrid();
-    renderForYou();
+    renderForYou(); renderThisWeek();
     if (currentDetail) updateWatchedBtn(currentDetail);
     closeSignin();
   };
@@ -737,7 +771,7 @@
       (d.watched || []).forEach((k) => watchedSet.add(k));
       refreshAccount();
       renderGrid();
-      renderForYou();
+      renderForYou(); renderThisWeek();
       if (location.pathname === "/watched" && watchedSet.size)
         showWatchlist({ push: false });
     })
@@ -750,7 +784,7 @@
 
   /* open on card click / Enter — rating badge and platform links are left alone */
   document.addEventListener("click", (e) => {
-    const badge = e.target.closest(".badge-rating");
+    const badge = e.target.closest("a.badge-rating"); // the "New" badge is a span — let it open the card
     if (badge) {
       const c = badge.closest("[data-id]");
       if (c) ga("event", "imdb_click", { item_name: TITLES[Number(c.dataset.id)]?.title || "" });
@@ -846,6 +880,15 @@
     renderGrid();
     closeSuggest();
   };
+
+  /* cast / director names in the detail popup → search for that person */
+  $("#detail-credits").addEventListener("click", (e) => {
+    const b = e.target.closest(".credit-link");
+    if (!b) return;
+    closeDetail();
+    runSearch(b.dataset.person);
+    ga("event", "search", { search_term: b.dataset.person, source: "credits" });
+  });
 
   const renderSuggest = (raw) => {
     const q = raw.trim().toLowerCase();
@@ -1052,7 +1095,7 @@
     }
     renderGrid();
     $$(".top-link").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
-    ga("event", "select_content", { content_type: "preset", item_id: name });
+    if (push) ga("event", "select_content", { content_type: "preset", item_id: name }); // not on every home load
     if (push && location.pathname !== PRESET_PATH[name])
       history.pushState({}, "", PRESET_PATH[name]);
     if (scroll) $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1086,7 +1129,7 @@
   };
 
   const routeHome = (push) => {
-    clearAll();
+    applyPreset("recent", { push: false, scroll: false }); // home = Recent
     if (push && location.pathname !== "/") history.pushState({}, "", "/");
   };
   window.addEventListener("popstate", () => {
@@ -1121,7 +1164,7 @@
     favGenres = [...modalSelection];
     saveFavs(favGenres);
     closeModal();
-    renderForYou();
+    renderForYou(); renderThisWeek();
     renderChips();
     forYouSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -1172,11 +1215,12 @@
   applyDefaultRating(); // 7+ is the site default — Clear ✕ removes it
   renderHero();
   renderChips();
-  renderForYou();
+  renderForYou(); renderThisWeek();
   renderGrid();
   layoutFilters();
   setTimeout(layoutFilters, 400); // re-check once metrics settle (webview quirk)
-  const bootPreset = PATH_PRESET[location.pathname];
+  /* the home page IS the "Recent" view — newest first, this year's releases */
+  const bootPreset = PATH_PRESET[location.pathname] || (["/", "/index.html"].includes(location.pathname) ? "recent" : null);
   if (bootPreset) applyPreset(bootPreset, { push: false, scroll: false });
   applyParams(); // shared-URL filters layer on top of any preset defaults
   /* password-reset deep link: /reset?token=… */

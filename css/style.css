@@ -746,6 +746,11 @@ a.badge-rating:hover {
   box-shadow: 0 6px 20px -4px rgba(245, 197, 24, 0.5);
 }
 .badge-rating svg { display: block; }
+/* just released — IMDb hasn't scored it yet */
+.badge-rating.badge-new {
+  color: #fff; background: var(--chili);
+  font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+}
 .badge-top {
   position: absolute; top: 12px; right: 12px;
   font-size: 0.66rem; font-weight: 800;
@@ -1204,6 +1209,15 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
   padding-top: 2px;
 }
 .detail-credits dd { color: var(--text); }
+/* cast & director names are live: click → every title with that person */
+.credit-link {
+  font: inherit; color: var(--text);
+  background: none; border: none; padding: 0;
+  cursor: pointer;
+  border-bottom: 1px dotted color-mix(in srgb, var(--saffron) 60%, transparent);
+  transition: color 0.15s, border-color 0.15s;
+}
+.credit-link:hover { color: var(--saffron); border-bottom-color: var(--saffron); }
 
 .detail-foot {
   margin-top: auto;

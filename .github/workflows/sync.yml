@@ -6,7 +6,7 @@ name: Sync catalogue
 
 on:
   schedule:
-    - cron: "30 1 * * *" # daily, 07:00 IST — full sync: new releases, posters,
+    - cron: "17 0 * * *" # daily, ~05:50 IST (odd minute: GitHub queues :00/:30 crons for hours) — full sync: new releases, posters,
                          # IMDb ids & exact ratings, certs, episodes
   workflow_dispatch: {}
 

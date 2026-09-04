@@ -25,6 +25,14 @@ cd "$REPO_DIR"
 if [[ -z "${DEPLOY_STAGE2:-}" ]]; then
   info "updating checkout to origin/$BRANCH"
   git fetch origin "$BRANCH"
+  # Runs hourly from cron so the nightly catalogue sync goes live within the
+  # hour instead of waiting for tomorrow. Bail out cheaply when there is
+  # nothing new and the site is up (FORCE=1 to rebuild anyway).
+  if [[ -z "${FORCE:-}" && "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$BRANCH")" ]] \
+     && curl -fsS -o /dev/null "$HEALTH_URL"; then
+    ok "already at $(git rev-parse --short HEAD) and healthy — nothing to deploy"
+    exit 0
+  fi
   git checkout -q "$BRANCH"
   git reset --hard "origin/$BRANCH"
   ok "at $(git rev-parse --short HEAD): $(git log -1 --pretty=%s)"

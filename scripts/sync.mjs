@@ -68,12 +68,44 @@ const tmdb = async (p, params = {}, tries = 4) => {
   }
 };
 
+/* ---------- TV we never want ----------
+   The catalogue is web series: seasons, a finite episode count. Daily
+   soaps, reality/talk/news shows storm TMDB's Hindi popularity sweeps
+   (they air daily, so by TMDB's measure they *are* popular), and TMDB's
+   genre tagging for them is patchy — Faltu, Maitree, Titlie are plain
+   "Drama". So exclude the tagged ones by genre and catch the rest by
+   shape: hundreds of episodes crammed into one or two "seasons". */
+const JUNK_TV_GENRES = new Set([10766 /* Soap */, 10764 /* Reality */, 10767 /* Talk */, 10763 /* News */]);
+const NO_JUNK = [...JUNK_TV_GENRES].join(",");
+const isJunkTv = (t, genreIds = []) => {
+  if (t.type !== "series") return false;
+  if (genreIds.some((id) => JUNK_TV_GENRES.has(id))) return true;
+  if (t.genres?.includes("Animation")) return false;   // long-running anime is not a soap
+  const eps = t.episodes || 0;
+  const perSeason = eps / Math.max(t.seasons || 1, 1);
+  if (eps > 100 && perSeason > 40) return true;         // Taarak Mehta, Bigg Boss, telenovelas
+  // smaller Hindi dailies (Do Dil Mil Rahe Hai: 81 eps / 1 season); a
+  // rating floor keeps genuine classics like Mahabharat (94 eps, 8.9)
+  if (t.lang === "hi" && eps > 60 && perSeason > 40 && t.rating < 8) return true;
+  return false;
+};
+
 /* ---------- load existing DB ---------- */
 const src = await readFile(DB_FILE, "utf8");
 const jsonText = src.slice(src.indexOf("{", src.indexOf("window.BINGE_DB")), src.lastIndexOf("}") + 1);
 const db = (0, eval)("(" + jsonText + ")"); // our own file, structured as an object literal
 const existing = new Map(db.titles.map((t) => [`${t.title.toLowerCase()}|${t.year}`, t]));
 console.log(`● Loaded ${existing.size} existing titles`);
+{
+  let dropped = 0;
+  for (const [key, t] of existing) {
+    if (!isJunkTv(t)) continue;
+    existing.delete(key);
+    dropped++;
+    console.log(`  ✗ dropped ${t.title} (${t.year}) — ${t.episodes} eps / ${t.seasons || 1} season${(t.seasons || 1) > 1 ? "s" : ""}`);
+  }
+  if (dropped) console.log(`● dropped ${dropped} daily soaps / reality shows`);
+}
 
 /* ---------- IMDb's official daily dataset ----------
    https://datasets.imdbws.com/title.ratings.tsv.gz — no key, exact rating
@@ -89,7 +121,10 @@ console.log(`● Loaded ${existing.size} existing titles`);
    (2) later in this file, to overwrite TMDB's approximate ratings with
        IMDb's exact ones for every title (new or existing) that has an
        imdb id. */
-const IMDB_VOTE_OVERRIDE = 200;
+// Real IMDb votes needed to override TMDB's thin vote count. 200 is plenty for
+// a small-audience Hindi film; English titles with a real audience rack up
+// thousands within days, and 200 lets Lifetime/DTV filler through.
+const IMDB_VOTE_OVERRIDE = { hi: 200, en: 2000 };
 const imdbData = new Map(); // tconst -> { rating, votes }
 try {
   CALLS.imdbDataset++;
@@ -109,6 +144,28 @@ try {
   console.warn(`⚠ IMDb dataset unavailable (${e.message}) — discovery gate and rating refresh both skip it this run`);
 }
 
+/* ---------- provisional titles ----------
+   Release-week admissions (the fresh sweep, the 1-vote Hindi floor, the
+   IMDb override) are on goodwill: TMDB has no votes yet, so we can't tell a
+   real release from direct-to-OTT filler on day one. A week in, IMDb can —
+   anything still short of real votes goes. Runs on every title in its
+   second-to-ninth week, so last week's admissions get audited too. */
+{
+  const IMDB_KEEP = { hi: 100, en: 1000 };
+  let dropped = 0;
+  for (const [key, t] of existing) {
+    if (!t.released) continue;
+    const age = (Date.now() - new Date(t.released).getTime()) / 864e5;
+    if (age < 7 || age > 60) continue;
+    const votes = imdbData.get(t.imdb)?.votes ?? 0;
+    if (votes >= IMDB_KEEP[t.lang]) continue;
+    existing.delete(key);
+    dropped++;
+    console.log(`  ✗ dropped ${t.title} (${t.released}) — only ${votes} IMDb votes after ${Math.round(age)} days`);
+  }
+  if (dropped) console.log(`● dropped ${dropped} provisional titles that never found an audience`);
+}
+
 /* ---------- genre maps ---------- */
 const [gm, gt] = await Promise.all([tmdb("/genre/movie/list"), tmdb("/genre/tv/list")]);
 const GENRE_BY_ID = new Map([...gm.genres, ...gt.genres].map((g) => [g.id, g.name]));
@@ -124,13 +181,21 @@ const mapGenres = (ids) =>
 
 /* ---------- discover ---------- */
 const since = new Date(Date.now() - LOOKBACK_DAYS * 864e5).toISOString().slice(0, 10);
+// "just released" window — see the fresh sweeps at the end of the list
+const FRESH_DAYS = 14;
+// minimum TMDB popularity for a title under 45 days old (see the gate below)
+// (calibrated 2026-09: real English streaming releases run 50–250 on release
+// week, direct-to-video noise 8–20; Hindi popularity scores are ~10× smaller)
+const FRESH_POP = { hi: 2, en: 40 };
+const freshFrom = new Date(Date.now() - FRESH_DAYS * 864e5).toISOString().slice(0, 10);
+const freshTo = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 const queries = [
   // Hindi-first: this is the heart of the catalogue
   ...Array.from({ length: PAGES }, (_, i) => ["movie", { with_original_language: "hi", sort_by: "popularity.desc", "primary_release_date.gte": since, page: i + 1 }]),
-  ...Array.from({ length: PAGES }, (_, i) => ["tv", { with_original_language: "hi", sort_by: "popularity.desc", "first_air_date.gte": since, page: i + 1 }]),
+  ...Array.from({ length: PAGES }, (_, i) => ["tv", { with_original_language: "hi", sort_by: "popularity.desc", "first_air_date.gte": since, without_genres: NO_JUNK, page: i + 1 }]),
   // English: just the cream
   ["movie", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 500, "primary_release_date.gte": since, page: 1 }],
-  ["tv", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 300, "first_air_date.gte": since, page: 1 }],
+  ["tv", { with_original_language: "en", sort_by: "vote_average.desc", "vote_count.gte": 300, "first_air_date.gte": since, without_genres: NO_JUNK, page: 1 }],
   // ALL-TIME back catalogue — the sweeps above only look at recent releases,
   // which is why classics and franchise entries (Rocky, Batman Begins, The
   // Godfather II…) never arrived. No date filter here on purpose.
@@ -148,11 +213,20 @@ const queries = [
   // Family) is what "kids & family" actually means here.
   ...Array.from({ length: 15 }, (_, i) => ["movie", { with_genres: "16|10751", sort_by: "vote_count.desc", "vote_count.gte": 400, page: i + 1 }]),
   ...Array.from({ length: PAGES }, (_, i) => ["movie", { with_genres: "16|10751", with_original_language: "hi", sort_by: "popularity.desc", page: i + 1 }]),
-  ...Array.from({ length: 2 }, (_, i) => ["tv", { with_genres: "16|10751", sort_by: "vote_count.desc", "vote_count.gte": 200, page: i + 1 }]),
+  ...Array.from({ length: 2 }, (_, i) => ["tv", { with_genres: "16|10751", sort_by: "vote_count.desc", "vote_count.gte": 200, without_genres: NO_JUNK, page: i + 1 }]),
+  // Just released (last two weeks). A brand-new title has zero votes on
+  // TMDB *and* IMDb for days, so none of the vote gates above can see it —
+  // Mirzapur: The Movie sat at 0 votes on release day. These sweeps take
+  // anything with a poster and a pulse of popularity; the IMDb rating
+  // refresh corrects the score as soon as IMDb has one.
+  ["movie", { with_original_language: "hi", "primary_release_date.gte": freshFrom, "primary_release_date.lte": freshTo, sort_by: "popularity.desc", page: 1 }, { fresh: true }],
+  ["tv", { with_original_language: "hi", "first_air_date.gte": freshFrom, "first_air_date.lte": freshTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { fresh: true }],
+  ["movie", { with_original_language: "en", "primary_release_date.gte": freshFrom, "primary_release_date.lte": freshTo, sort_by: "popularity.desc", page: 1 }, { fresh: true }],
+  ["tv", { with_original_language: "en", "first_air_date.gte": freshFrom, "first_air_date.lte": freshTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { fresh: true }],
 ];
 
 const found = [];
-for (const [kind, params] of queries) {
+for (const [kind, params, opts = {}] of queries) {
   const data = await tmdb(`/discover/${kind}`, params);
   for (const r of data.results || []) {
     const title = (r.title || r.name || "").trim();
@@ -160,6 +234,7 @@ for (const [kind, params] of queries) {
     const year = Number(date.slice(0, 4));
     const lang = r.original_language === "hi" ? "hi" : "en";
     if (!title || !year) continue;
+    if (kind === "tv" && (r.genre_ids || []).some((id) => JUNK_TV_GENRES.has(id))) continue;
     let imdb = null;
     try {
       const ext = await tmdb(`/${kind}/${r.id}/external_ids`);
@@ -168,9 +243,21 @@ for (const [kind, params] of queries) {
     // TMDB's own vote_count is the primary signal, but it's unreliable for
     // small-audience Hindi releases — fall back to IMDb's real vote count
     // before giving up on a title TMDB itself barely got any votes on.
-    const passesTmdb = r.vote_count >= minVotes(lang, kind, date);
-    const passesImdb = imdb && (imdbData.get(imdb)?.votes ?? 0) >= IMDB_VOTE_OVERRIDE;
-    if (!passesTmdb && !passesImdb) continue;
+    // Release-week noise: TMDB lists every direct-to-OTT upload the day it
+    // lands, and a 1-vote title clears the 45-day Hindi floor. Ask for a
+    // pulse of TMDB popularity on anything that new (real releases have it:
+    // Gandhari 38, Mirzapur: The Movie 2.8 on day one; "The Critique" 0.5).
+    const daysOld = date ? (Date.now() - new Date(date).getTime()) / 864e5 : 999;
+    const pulse = r.popularity >= FRESH_POP[lang];
+    const passesTmdb = r.vote_count >= minVotes(lang, kind, date) && (daysOld > 45 || pulse);
+    const passesImdb = imdb && (imdbData.get(imdb)?.votes ?? 0) >= IMDB_VOTE_OVERRIDE[lang];
+    // just-released sweep: no votes anywhere yet, so judge by poster + popularity
+    const passesFresh = opts.fresh && r.poster_path && pulse;
+    if (!passesTmdb && !passesImdb && !passesFresh) continue;
+    // a vote_average built on a handful of votes is noise (10.0 from two
+    // votes) — leave it unrated; the IMDb dataset pass below scores it as
+    // soon as IMDb has a rating, and the site shows "New" until then
+    const tmdbRating = r.vote_count >= 10 ? Math.round(r.vote_average * 10) / 10 : 0;
     found.push({
       ...(imdb && { imdb }),
       title,
@@ -178,7 +265,7 @@ for (const [kind, params] of queries) {
       year,
       lang,
       genres: mapGenres(r.genre_ids || []),
-      rating: Math.round(r.vote_average * 10) / 10,
+      rating: tmdbRating,
       platform: "Streaming",
       ...(date && { released: date }),
       plot: (r.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "Recently released — synopsis coming soon.",
@@ -286,9 +373,12 @@ const pickCert = (list) => {
   return null;
 };
 
-let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0, usPlatFilled = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0, usPlatFilled = 0, junkDropped = 0;
 for (const t of existing.values()) {
-  if (t.poster && t.imdb && t.cert && t.released && t.usChecked &&
+  // still-running series get their episode count / last air date refreshed
+  // every run so "new episodes" surface on the site; finished shows don't
+  const liveSeries = t.type === "series" && (!t.lastAired || t.lastAired >= since);
+  if (!liveSeries && t.poster && t.imdb && t.cert && t.released && t.usChecked &&
       !["Streaming", "Theatres"].includes(t.platform) && // re-check until OTT arrival
       (t.type === "movie" || t.episodes)) continue;
   try {
@@ -316,10 +406,18 @@ for (const t of existing.values()) {
       const ext = await tmdb(`/${kind}/${hit.id}/external_ids`);
       if (/^tt\d+$/.test(ext.imdb_id || "")) { t.imdb = ext.imdb_id; imdbFilled++; }
     }
-    if (t.type === "series" && !t.episodes) {
+    if (t.type === "series" && (!t.episodes || liveSeries)) {
       const det = await tmdb(`/tv/${hit.id}`);
-      if (det.number_of_episodes) { t.episodes = det.number_of_episodes; epsFilled++; }
+      if (det.number_of_episodes) { if (!t.episodes) epsFilled++; t.episodes = det.number_of_episodes; }
       if (det.number_of_seasons) t.seasons = det.number_of_seasons;
+      if (det.last_air_date) t.lastAired = det.last_air_date;
+      // now that we know its shape (and TMDB's own genre tags), throw out
+      // anything that turns out to be a daily soap / reality show
+      if (isJunkTv(t, (det.genres || []).map((g) => g.id))) {
+        existing.delete(`${t.title.toLowerCase()}|${t.year}`);
+        junkDropped++;
+        continue;
+      }
     }
     if (!t.cert) {
       const cd = t.type === "movie"
@@ -354,7 +452,7 @@ for (const t of existing.values()) {
   } catch { /* leave as-is — will retry next sync */ }
   await sleep(60); // stay well clear of TMDB's rate limit across ~100+ rechecks
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} IN platforms, ${usPlatFilled} US platforms`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} IN platforms, ${usPlatFilled} US platforms${junkDropped ? `, ${junkDropped} soaps/reality dropped` : ""}`);
 
 /* ---------- seed iconic franchises ----------
    Collection expansion can only follow films we already hold, so seed the
@@ -528,14 +626,21 @@ if (merged || clearedMismatch)
    Overrides TMDB approximations everywhere, for titles old and brand new. */
 {
   let imdbExact = 0, matched = 0;
+  let unrated = 0;
   for (const t of existing.values()) {
     if (!t.imdb) continue;
     const hit = imdbData.get(t.imdb);
-    if (!hit) continue;
+    if (!hit) {
+      // IMDb hasn't scored it yet — for a recent release that means whatever
+      // TMDB number we're holding came from a handful of votes. Show "New".
+      const age = t.released ? (Date.now() - new Date(t.released).getTime()) / 864e5 : 999;
+      if (age <= 60 && t.rating) { t.rating = 0; unrated++; }
+      continue;
+    }
     matched++;
     if (hit.rating !== t.rating) { t.rating = hit.rating; imdbExact++; }
   }
-  console.log(`● IMDb dataset: ${imdbExact} ratings set to exact IMDb scores (${matched} ids matched against)`);
+  console.log(`● IMDb dataset: ${imdbExact} ratings set to exact IMDb scores (${matched} ids matched against)${unrated ? `, ${unrated} recent releases left unrated until IMDb scores them` : ""}`);
 }
 
 /* ---------- write ---------- */
@@ -559,6 +664,7 @@ const entry = (t) => {
     ...(t.tags?.length && { tags: t.tags }),
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
+    ...(t.lastAired && { lastAired: t.lastAired }),
     ...(t.platformUs && { platformUs: t.platformUs }),
     ...(t.usChecked && { usChecked: 1 }),
   };
