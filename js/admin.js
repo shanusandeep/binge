@@ -148,7 +148,16 @@
         <div class="tile"><b>${num(c.hindi)}</b><span>Hindi</span></div>
         <div class="tile"><b>${num(c.english)}</b><span>English</span></div>
         <div class="tile"><b>${fmtDate(c.syncedAt)}</b><span>Last synced</span></div>
-      </div>` : `<p class="err">Catalogue data unavailable right now.</p>`}
+      </div>
+      ${(() => {
+        // what the *live* site is serving vs today — the sync can succeed
+        // every night while the server never deploys it (it happened for
+        // weeks: cron couldn't write its log file and died silently)
+        const age = Math.floor((Date.now() - parseTs(c.syncedAt)) / 864e5);
+        return age >= 2
+          ? `<p class="err">⚠ The live catalogue is ${age} days old. Syncs are landing on GitHub but the server isn't deploying them — check <code>/srv/binge/deploy.log</code> and the hourly cron on the server.</p>`
+          : "";
+      })()}` : `<p class="err">Catalogue data unavailable right now.</p>`}
 
       <div class="panel-title">Last 14 days</div>
       <div class="charts">

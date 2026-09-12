@@ -13,6 +13,13 @@ on:
 permissions:
   contents: write
 
+# Never let two syncs overlap: the scheduled run and a "Run sync now" from the
+# admin page both rewrite data/titles.js, and rebasing one onto the other
+# duplicates rows (Chumbak appeared twice). Queue instead.
+concurrency:
+  group: catalogue-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
