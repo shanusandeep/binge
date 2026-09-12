@@ -26,6 +26,10 @@ sudo mkdir -p "$APP_DIR"
 if [[ ! -d "$REPO_DIR/.git" ]]; then
   sudo mkdir -p "$REPO_DIR"
   sudo chown "$(whoami)" "$REPO_DIR"
+  # the deploy cron appends to this as the login user; $APP_DIR itself stays
+  # root-owned, so create the file up front or the redirect fails with EACCES
+  # and cron silently never runs deploy.sh (it did exactly that for weeks)
+  sudo touch "$APP_DIR/deploy.log" && sudo chown "$(whoami)" "$APP_DIR/deploy.log"
   git clone "$REPO_URL" "$REPO_DIR"
   ok "cloned $REPO_URL"
 else
