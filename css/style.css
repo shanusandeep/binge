@@ -1551,7 +1551,12 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
     height: 100%; max-width: 72%;
     padding: 14px 16px;
   }
-  .featured-kicker { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.26em; text-transform: uppercase; color: rgba(242, 233, 220, 0.75); }
+  .featured-kicker { display: flex; align-items: center; gap: 8px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.26em; text-transform: uppercase; color: rgba(242, 233, 220, 0.75); }
+  .featured-platform {
+    font-size: 0.64rem; font-weight: 800; letter-spacing: 0.06em; text-transform: none;
+    color: #140d02; background: #ffb43a;
+    border-radius: 999px; padding: 3px 9px;
+  }
   .featured-title {
     font-family: var(--font-display); font-size: 1.5rem; line-height: 1.05;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

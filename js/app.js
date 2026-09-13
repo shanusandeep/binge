@@ -384,9 +384,15 @@
   const renderFeatured = (list, extras) => {
     const sec = $("#featured");
     if (!mqMobile.matches || extras.length || state.q || state.watchedOnly || seeAll) { sec.hidden = true; featuredTitle = null; return; }
-    // the best-rated of the view's first dozen (Recent → newest, Hits → top),
-    // preferring titles with landscape art
-    const pool = list.filter((t) => t.poster && t.rating).slice(0, 12)
+    // Only titles you can actually stream tonight: a named subscription
+    // platform for this visitor's region (not "Theatres", not the generic
+    // "Streaming" placeholder, not buy/rent). Then the best-rated of the
+    // view's first dozen such titles, preferring landscape art.
+    const streamable = (t) => {
+      const p = regionPlatform(t) || "";
+      return p && !["Streaming", "Theatres"].includes(p) && !/\(Buy\/Rent\)$/.test(p);
+    };
+    const pool = list.filter((t) => t.poster && t.rating && streamable(t)).slice(0, 12)
       .sort((a, b) => b.rating - a.rating).slice(0, 5);
     if (!pool.length) { sec.hidden = true; featuredTitle = null; return; }
     const withArt = pool.filter((t) => t.backdrop);
@@ -397,6 +403,7 @@
     if (art.src !== src) art.src = src;
     art.classList.toggle("is-poster", !t.backdrop); // portrait fallback: crop from the top-right
     $("#featured-title").textContent = t.title;
+    $("#featured-platform").textContent = regionPlatform(t);
     $("#featured-meta").textContent = [t.year, t.lang === "hi" ? "हिंदी" : "English", t.genres[0]].filter(Boolean).join(" · ");
     $("#featured-card").setAttribute("aria-label", `Featured: ${t.title} — view details`);
     sec.hidden = false;
