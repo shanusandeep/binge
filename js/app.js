@@ -386,18 +386,21 @@
     if (!mqMobile.matches || extras.length || state.q || state.watchedOnly || seeAll) { sec.hidden = true; featuredTitle = null; return; }
     // Only titles you can actually stream tonight: a named subscription
     // platform for this visitor's region (not "Theatres", not the generic
-    // "Streaming" placeholder, not buy/rent). Then the best-rated of the
+    // "Streaming" placeholder, not buy/rent). Then the six best-rated of the
     // view's first dozen such titles, preferring landscape art.
     const streamable = (t) => {
       const p = regionPlatform(t) || "";
       return p && !["Streaming", "Theatres"].includes(p) && !/\(Buy\/Rent\)$/.test(p);
     };
     const pool = list.filter((t) => t.poster && t.rating && streamable(t)).slice(0, 12)
-      .sort((a, b) => b.rating - a.rating).slice(0, 5);
+      .sort((a, b) => b.rating - a.rating).slice(0, 6);
     if (!pool.length) { sec.hidden = true; featuredTitle = null; return; }
     const withArt = pool.filter((t) => t.backdrop);
     const cands = withArt.length ? withArt : pool;
-    featuredTitle = cands[Math.floor(Date.now() / 864e5) % cands.length];
+    // rotates three times a day (every 8 hours), stable within a slot — no
+    // carousel, no change on reload
+    const slot = Math.floor(Date.now() / (8 * 3600e3));
+    featuredTitle = cands[slot % cands.length];
     const t = featuredTitle, art = $("#featured-art");
     const src = t.backdrop || t.poster;
     if (art.src !== src) art.src = src;
