@@ -305,6 +305,8 @@ const entry = (t) => {
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
     ...(t.lastAired && { lastAired: t.lastAired }),
+    ...(t.backdrop && { backdrop: t.backdrop }),
+    ...(t.bdChecked && { bdChecked: 1 }),
     ...(t.platformUs && { platformUs: t.platformUs }),
     ...(t.usChecked && { usChecked: 1 }),
   };

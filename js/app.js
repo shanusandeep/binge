@@ -32,6 +32,9 @@
   /* what the current view (Recent / All-time hits / none) sets by itself —
      the mobile chips and funnel badge only count filters beyond this */
   let presetBase = { year: "all", sort: "rating", minRating: 7 };
+  /* mobile "See all" from a shelf: "new" | "picks" | null — forces the grid
+     view and labels it; cleared by Home / a preset change / Back */
+  let seeAll = null;
   const setBase = () => { presetBase = { year: state.year, sort: state.sort, minRating: state.minRating }; };
 
   /* ---------- els ---------- */
@@ -313,7 +316,7 @@
         <h3 class="card-title">${esc(t.title)}</h3>
         <p class="card-meta">
           <span class="type-tag">${typeTag}</span><span class="dot">·</span>
-          <span>${t.year}</span><span class="dot">·</span>
+          <span class="year-tag">${t.year}</span><span class="dot">·</span>
           <span class="lang-tag">${langTag}</span>
           ${t.seasons ? `<span class="se-tag" title="${t.seasons} season${t.seasons > 1 ? "s" : ""}, ${t.episodes} episodes">${t.seasons}S · ${t.episodes}Ep</span>` : ""}
           ${t.cert ? `<span class="se-tag" title="Age rating (${esc(t.cert)})">${esc(certLabel(t.cert))}</span>` : ""}
@@ -350,7 +353,7 @@
        are not "focus" — otherwise the home page would never show the rails. */
     const extras = extraFilters();
     document.body.classList.toggle("is-focused",
-      extras.length > 0 || state.q !== "" || state.watchedOnly);
+      extras.length > 0 || state.q !== "" || state.watchedOnly || seeAll !== null);
     syncURL();
 
     /* the 7+ toggles (header + mobile toolbar) mirror the min-rating filter */
@@ -364,10 +367,54 @@
     const badge = $("#filter-count");
     badge.hidden = !extras.length;
     badge.textContent = extras.length;
-    $("#mobile-results").textContent = `${list.length} title${list.length === 1 ? "" : "s"}`;
     $("#sheet-apply").textContent = `Show ${list.length} title${list.length === 1 ? "" : "s"}`;
-    document.body.classList.toggle("has-filters", extras.length > 0 || state.q !== "");
-    renderActiveChips(extras);
+    $("#sheet-summary").textContent = extras.length
+      ? "Active: " + extras.map((f) => f.label).join(" · ")
+      : "No extra filters — showing this view's defaults.";
+    document.body.classList.toggle("has-filters", extras.length > 0 || state.q !== "" || seeAll !== null);
+    renderFeatured(list, extras);
+    renderGridHead(extras);
+  };
+
+  /* ---------- mobile: featured banner ----------
+     One real title from the current view's own list (so it never contradicts
+     the mode or the 7+ toggle); hidden whenever the visitor is filtering.
+     Stable for the day — no auto-rotation. */
+  let featuredTitle = null;
+  const renderFeatured = (list, extras) => {
+    const sec = $("#featured");
+    if (!mqMobile.matches || extras.length || state.q || state.watchedOnly || seeAll) { sec.hidden = true; featuredTitle = null; return; }
+    // the best-rated of the view's first dozen (Recent → newest, Hits → top),
+    // preferring titles with landscape art
+    const pool = list.filter((t) => t.poster && t.rating).slice(0, 12)
+      .sort((a, b) => b.rating - a.rating).slice(0, 5);
+    if (!pool.length) { sec.hidden = true; featuredTitle = null; return; }
+    const withArt = pool.filter((t) => t.backdrop);
+    const cands = withArt.length ? withArt : pool;
+    featuredTitle = cands[Math.floor(Date.now() / 864e5) % cands.length];
+    const t = featuredTitle, art = $("#featured-art");
+    const src = t.backdrop || t.poster;
+    if (art.src !== src) art.src = src;
+    art.classList.toggle("is-poster", !t.backdrop); // portrait fallback: crop from the top-right
+    $("#featured-title").textContent = t.title;
+    $("#featured-meta").textContent = [t.year, t.lang === "hi" ? "हिंदी" : "English", t.genres[0]].filter(Boolean).join(" · ");
+    $("#featured-card").setAttribute("aria-label", `Featured: ${t.title} — view details`);
+    sec.hidden = false;
+  };
+  $("#featured-card").addEventListener("click", () => { if (featuredTitle) openDetail(featuredTitle); });
+
+  /* mobile: heading over the grid (and a way back from a "See all" view) */
+  const renderGridHead = (extras) => {
+    const focused = extras.length > 0 || state.q !== "" || state.watchedOnly || seeAll !== null;
+    $("#grid-head").hidden = !mqMobile.matches;
+    $("#grid-title").textContent =
+      state.watchedOnly ? "Watched" :
+      state.q ? `Results for “${$("#search-input").value.trim()}”` :
+      seeAll === "new" ? "New arrivals" :
+      seeAll === "picks" ? "Picked for you" :
+      extras.length ? "Filtered titles" :
+      presetBase.sort === "newest" ? "Recent releases" : "All-time hits";
+    $("#grid-back").hidden = !focused;
   };
 
   const extraFilters = () => {
@@ -382,12 +429,6 @@
     for (const g of state.genres) x.push({ key: "genre", value: g, label: g });
     if (state.platform !== "all") x.push({ key: "platform", label: state.platform });
     return x;
-  };
-  const renderActiveChips = (extras) => {
-    const row = $("#active-chips");
-    row.hidden = !extras.length;
-    row.innerHTML = extras.map((f) =>
-      `<button type="button" class="mchip" data-chip="${f.key}" data-value="${esc(f.value || "")}" aria-label="Remove filter: ${esc(f.label)}">${esc(f.label)} <b aria-hidden="true">×</b></button>`).join("");
   };
 
   /* ---------- shareable filter URLs ---------- */
@@ -493,7 +534,18 @@
 
   /* ---------- render: for-you rail ---------- */
   const renderForYou = () => {
-    if (!favGenres.length) { forYouSection.hidden = true; return; }
+    const seeAllBtn = forYouSection.querySelector(".see-all");
+    if (!favGenres.length) {
+      // phones keep the shelf as a nudge to pick genres; desktop hides it
+      forYouSection.hidden = !mqMobile.matches;
+      forYouNote.textContent = "tell us what you love";
+      forYouRail.classList.add("is-cta");
+      forYouRail.innerHTML = `<button type="button" class="rail-cta" id="foryou-cta">✦ Pick up to 4 favourite genres and we'll line up picks for you</button>`;
+      if (seeAllBtn) seeAllBtn.hidden = true;
+      return;
+    }
+    forYouRail.classList.remove("is-cta");
+    if (seeAllBtn) seeAllBtn.hidden = false;
     const picks = TITLES
       .filter((t) => t.rating >= 7.3 && !watchedSet.has(titleKey(t)) &&
         t.genres.some((g) => favGenres.includes(g)))
@@ -671,15 +723,15 @@
       $("#btn-admin").hidden = true;
     }
   };
-  accountBtn.addEventListener("click", () => {
+  const toggleAccountMenu = () => {
     // desktop guests go straight to sign-in; on mobile the menu also holds
-    // My Genres / theme / refresh, so it opens for everyone
+    // theme / refresh, so it opens for everyone (with a Sign in entry)
     if (!user && !mqMobile.matches) return openSignin();
     accountMenu.classList.toggle("is-guest", !user);
     accountMenu.hidden = !accountMenu.hidden;
-  });
+  };
+  accountBtn.addEventListener("click", toggleAccountMenu);
   $("#menu-signin").addEventListener("click", () => { accountMenu.hidden = true; openSignin(); });
-  $("#menu-my-genres").addEventListener("click", () => { accountMenu.hidden = true; openModal(); });
   $("#menu-theme").addEventListener("click", toggleTheme);
   $("#menu-sync").addEventListener("click", () => { accountMenu.hidden = true; $("#btn-sync").click(); });
   $("#btn-signout").addEventListener("click", async () => {
@@ -693,7 +745,8 @@
   });
   $("#btn-watchlist").addEventListener("click", () => showWatchlist());
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".account-wrap")) accountMenu.hidden = true;
+    if (e.target.closest(".account-wrap, #account-menu, #nav-profile")) return;
+    if (!accountMenu.hidden) { accountMenu.hidden = true; setNav("home"); }
   });
 
   /* admin dashboard lives on its own page — /admin (admin.html) */
@@ -903,6 +956,7 @@
     document.body.style.overflow = "hidden";
   };
   const closeModal = () => {
+    if (!modalVeil.hidden) setNav("home");
     modalVeil.hidden = true;
     document.body.style.overflow = "";
     localStorage.setItem(LS_SEEN, "1");
@@ -1156,6 +1210,21 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePlatforms(); });
   renderPlatformRow();
 
+  /* mobile "Recent ▾" mode dropdown — the options are [data-preset] buttons,
+     so the preset listener below already applies them */
+  const modeToggle = $("#mode-toggle"), modePanel = $("#mode-panel");
+  const closeMode = () => { modePanel.hidden = true; modeToggle.setAttribute("aria-expanded", "false"); };
+  modeToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeGenres(); closePlatforms();
+    const open = modePanel.hidden;
+    modePanel.hidden = !open;
+    modeToggle.setAttribute("aria-expanded", String(open));
+  });
+  modePanel.addEventListener("click", (e) => { e.stopPropagation(); if (e.target.closest("[data-preset]")) closeMode(); });
+  document.addEventListener("click", closeMode);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMode(); });
+
   const clearAll = () => {
     state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all"; state.platform = "all";
     $("#age-select").value = "all";
@@ -1202,6 +1271,8 @@
       $("#rating-select").classList.add("is-set");
     }
     setBase();
+    seeAll = null;
+    $("#mode-label").textContent = name === "recent" ? "Recent" : "All-time hits";
     renderGrid();
     $$("[data-preset]").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
     if (push) ga("event", "select_content", { content_type: "preset", item_id: name }); // not on every home load
@@ -1332,6 +1403,8 @@
     msReturnTo = document.activeElement;
     msScrollY = window.scrollY;
     msearch.hidden = false;
+    document.body.classList.add("msearch-open"); // hides the bottom bar
+    setNav("search");
     document.body.style.overflow = "hidden";
     fitMSearch();
     window.visualViewport?.addEventListener("resize", fitMSearch);
@@ -1341,14 +1414,15 @@
   const closeMSearch = () => {
     if (msearch.hidden) return;
     msearch.hidden = true;
+    document.body.classList.remove("msearch-open");
+    setNav("home");
     document.body.style.overflow = "";
     window.visualViewport?.removeEventListener("resize", fitMSearch);
     window.scrollTo(0, msScrollY);
     // iOS Safari doesn't focus a tapped button, so the opener is often <body>
-    const back = msReturnTo && msReturnTo !== document.body && !msearch.contains(msReturnTo) ? msReturnTo : $("#btn-search-open");
+    const back = msReturnTo && msReturnTo !== document.body && !msearch.contains(msReturnTo) ? msReturnTo : $("#nav-search");
     back.focus();
   };
-  $("#btn-search-open").addEventListener("click", openMSearch);
   $("#msearch-back").addEventListener("click", closeMSearch);
   msClear.addEventListener("click", () => { msInput.value = ""; renderMSearch(); msInput.focus(); });
   msInput.addEventListener("input", renderMSearch);
@@ -1371,6 +1445,47 @@
     const first = f[0], last = f[f.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  /* ---------- mobile bottom navigation ---------- */
+  const setNav = (id) => $$(".bnav").forEach((b) => {
+    const on = b.id === `nav-${id}`;
+    b.classList.toggle("is-active", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  $("#nav-home").addEventListener("click", () => {
+    closeMSearch(); closeModal(); accountMenu.hidden = true;
+    routeHome(true);
+    window.scrollTo({ top: 0 });
+    setNav("home");
+  });
+  $("#nav-search").addEventListener("click", openMSearch);
+  $("#nav-genres").addEventListener("click", () => { accountMenu.hidden = true; openModal(); setNav("genres"); });
+  $("#nav-profile").addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleAccountMenu();
+    setNav(accountMenu.hidden ? "home" : "profile");
+  });
+
+  /* shelf "See all" → the full grid for that shelf; Home / Back returns */
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#foryou-cta")) { openModal(); setNav("genres"); return; }
+    if (e.target.closest("#grid-back")) { routeHome(false); window.scrollTo({ top: 0 }); return; }
+    const b = e.target.closest("[data-seeall]");
+    if (!b) return;
+    history.pushState({ seeAll: b.dataset.seeall }, "", location.pathname + location.search);
+    if (b.dataset.seeall === "picks") {
+      state.genres = new Set(favGenres);
+      state.sort = "rating";
+      syncControls(); renderChips();
+      seeAll = "picks";
+    } else {
+      applyPreset("recent", { push: false, scroll: false });
+      seeAll = "new";
+    }
+    renderGrid();
+    $("#grid-head").scrollIntoView({ behavior: "smooth", block: "start" });
+    ga("event", "select_content", { content_type: "shelf", item_id: b.dataset.seeall });
   });
 
   /* ---------- mobile filter sheet ---------- */
@@ -1412,12 +1527,15 @@
     if (mobile === sheetBody.contains(rowTop)) return; // already in place
     if (mobile) {
       sheetBody.append(rowTop);
-      $(".site-header").after(filterbar);   // tabs + toolbar sit right under the header
+      $(".site-header").after(filterbar);   // the control row sits right under the header
+      document.body.append(accountMenu);    // menu rises above the bottom bar (header's backdrop-filter would trap position:fixed)
     } else {
       closeSheet();
       filterbar.append(rowTop);
       $("main.results").before(filterbar);
+      $(".account-wrap").append(accountMenu);
     }
+    renderGrid(); // featured banner / grid heading are viewport-dependent
   };
   mqMobile.addEventListener("change", layoutFilters);
   window.addEventListener("resize", layoutFilters);
@@ -1435,21 +1553,6 @@
   });
   sheetVeil.addEventListener("click", (e) => { if (e.target === sheetVeil) closeSheet(); });
 
-  /* removable chips under the toolbar */
-  $("#active-chips").addEventListener("click", (e) => {
-    const chip = e.target.closest("[data-chip]");
-    if (!chip) return;
-    const k = chip.dataset.chip;
-    if (k === "type") state.type = "all";
-    else if (k === "lang") state.lang = "all";
-    else if (k === "year") state.year = presetBase.year;
-    else if (k === "age") state.age = "all";
-    else if (k === "min") state.minRating = presetBase.minRating;
-    else if (k === "sort") state.sort = presetBase.sort;
-    else if (k === "genre") state.genres.delete(chip.dataset.value);
-    else if (k === "platform") state.platform = "all";
-    syncControls(); renderChips(); renderGrid(); savePrefs();
-  });
 
   /* ---------- boot ---------- */
   const applyDefaultRating = () => {

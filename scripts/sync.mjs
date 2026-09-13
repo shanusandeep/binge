@@ -270,6 +270,8 @@ for (const [kind, params, opts = {}] of queries) {
       ...(date && { released: date }),
       plot: (r.overview || "").split(/(?<=\.)\s/)[0].slice(0, 140) || "Recently released — synopsis coming soon.",
       ...(r.poster_path && { poster: `https://image.tmdb.org/t/p/w500${r.poster_path}` }),
+      ...(r.backdrop_path && { backdrop: `https://image.tmdb.org/t/p/w780${r.backdrop_path}` }),
+      bdChecked: 1,
       ...(r.overview && { desc: r.overview.replace(/\s+/g, " ").trim().slice(0, 550) }),
     });
   }
@@ -379,7 +381,7 @@ for (const t of existing.values()) {
   // every run so "new episodes" surface on the site; finished shows don't
   const liveSeries = t.type === "series" && (!t.lastAired || t.lastAired >= since);
   const credited = t.cast?.length && (t.type === "series" || t.director);
-  if (!liveSeries && credited && t.poster && t.imdb && t.cert && t.released && t.usChecked &&
+  if (!liveSeries && credited && t.poster && t.imdb && t.cert && t.released && t.usChecked && t.bdChecked &&
       !["Streaming", "Theatres"].includes(t.platform) && // re-check until OTT arrival
       (t.type === "movie" || t.episodes)) continue;
   try {
@@ -410,6 +412,11 @@ for (const t of existing.values()) {
       t.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path}`;
       if (!t.desc && hit.overview) t.desc = hit.overview.replace(/\s+/g, " ").trim().slice(0, 550);
       backfilled++;
+    }
+    // landscape art for the mobile featured banner — checked once per title
+    if (!t.bdChecked) {
+      if (hit.backdrop_path) t.backdrop = `https://image.tmdb.org/t/p/w780${hit.backdrop_path}`;
+      t.bdChecked = 1;
     }
     if (!t.imdb) {
       const ext = await tmdb(`/${kind}/${hit.id}/external_ids`);
@@ -690,6 +697,8 @@ const entry = (t) => {
     ...(t.episodes && { episodes: t.episodes }),
     ...(t.seasons && { seasons: t.seasons }),
     ...(t.lastAired && { lastAired: t.lastAired }),
+    ...(t.backdrop && { backdrop: t.backdrop }),
+    ...(t.bdChecked && { bdChecked: 1 }),
     ...(t.platformUs && { platformUs: t.platformUs }),
     ...(t.usChecked && { usChecked: 1 }),
   };
