@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=33" />
+  <link rel="stylesheet" href="css/style.css?v=34" />
   <!-- Google Analytics (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-M83077SW5W"></script>
   <script>
@@ -58,14 +58,21 @@
       <button class="btn-genres" id="btn-my-genres">
         <span aria-hidden="true">✦</span> My Genres
       </button>
+      <button type="button" class="btn-icon btn-search-open" id="btn-search-open" aria-label="Search titles, cast, director" title="Search">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
       <div class="account-wrap">
         <button class="btn-account" id="btn-account">Sign in</button>
         <div class="account-menu" id="account-menu" hidden>
-          <p class="account-name" id="account-name"></p>
-          <button class="btn-ghost" id="btn-watchlist">✓ Watched <span id="watched-count"></span></button>
-          <button class="btn-ghost" id="btn-admin" hidden>⚙ Admin</button>
-          <button class="btn-ghost" id="btn-changepw">Change password</button>
-          <button class="btn-ghost" id="btn-signout">Sign out</button>
+          <p class="account-name menu-user" id="account-name"></p>
+          <button class="btn-ghost menu-guest" id="menu-signin">Sign in</button>
+          <button class="btn-ghost menu-user" id="btn-watchlist">✓ Watched <span id="watched-count"></span></button>
+          <button class="btn-ghost menu-user" id="btn-admin" hidden>⚙ Admin</button>
+          <button class="btn-ghost menu-mobile" id="menu-my-genres">✦ My Genres</button>
+          <button class="btn-ghost menu-mobile" id="menu-theme">Light theme</button>
+          <button class="btn-ghost menu-mobile" id="menu-sync">⟳ Refresh catalogue</button>
+          <button class="btn-ghost menu-user" id="btn-changepw">Change password</button>
+          <button class="btn-ghost menu-user" id="btn-signout">Sign out</button>
         </div>
       </div>
     </div>
@@ -112,11 +119,19 @@
   <!-- ================= FILTER BAR ================= -->
   <nav class="filterbar" id="filterbar" aria-label="Browse filters">
     <div class="filter-row mobile-filter-row" id="mobile-filter-row" hidden>
-      <button class="btn-filters" id="btn-filters">
-        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5.5L10 21v-8L3 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        Filters<span class="filter-count" id="filter-count" hidden></span>
-      </button>
-      <span class="mobile-results" id="mobile-results"></span>
+      <div class="mtabs" role="tablist" aria-label="Quick views">
+        <button class="mtab" data-preset="recent" role="tab">Recent</button>
+        <button class="mtab" data-preset="hits" role="tab">All-time hits</button>
+      </div>
+      <div class="mtoolbar">
+        <button class="btn-filters" id="btn-filters">
+          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5.5L10 21v-8L3 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          Filters<span class="filter-count" id="filter-count" hidden></span>
+        </button>
+        <button class="mtoggle" id="btn-seven-m" aria-pressed="false" title="Only IMDb 7 and above">★ 7+</button>
+        <span class="mobile-results" id="mobile-results" aria-live="polite"></span>
+      </div>
+      <div class="mchips" id="active-chips" aria-label="Active filters" hidden></div>
     </div>
     <div class="filter-row filter-row-top">
       <div class="seg" role="tablist" aria-label="Type">
@@ -168,6 +183,12 @@
           <span id="genre-label">All genres</span>
         </button>
         <div class="genre-panel" id="genre-row" aria-label="Genres" hidden></div>
+      </div>
+      <div class="genre-wrap platform-wrap">
+        <button class="select genre-toggle" id="platform-toggle" aria-expanded="false" aria-haspopup="true">
+          <span id="platform-label">All platforms</span>
+        </button>
+        <div class="genre-panel" id="platform-row" aria-label="Platforms" hidden></div>
       </div>
       <button class="btn-clear" id="btn-clear" hidden>Clear ✕</button>
     </div>
@@ -237,15 +258,31 @@
     </div>
   </div>
 
+  <!-- ================= MOBILE SEARCH OVERLAY ================= -->
+  <div class="msearch" id="msearch" role="dialog" aria-modal="true" aria-label="Search" hidden>
+    <div class="msearch-bar">
+      <button type="button" class="btn-icon" id="msearch-back" aria-label="Close search">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="msearch-field">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="msearch-input" type="search" placeholder="Titles, cast, director…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Search titles, cast, director" aria-controls="msearch-results" />
+        <button type="button" class="btn-icon msearch-clear" id="msearch-clear" aria-label="Clear search" hidden>✕</button>
+      </div>
+    </div>
+    <div class="msearch-results" id="msearch-results" role="listbox" aria-label="Search results"></div>
+  </div>
+
   <!-- ================= MOBILE FILTER SHEET ================= -->
   <div class="sheet-veil" id="sheet-veil" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-label="Filters">
       <div class="sheet-handle" aria-hidden="true"></div>
       <h3 class="sheet-title">Filters</h3>
+      <p class="sheet-note">Change as many as you like — nothing applies until you tap Show. Tap outside to cancel.</p>
       <div class="sheet-body" id="sheet-body"></div>
       <div class="sheet-actions">
-        <button class="btn-ghost" id="sheet-reset">Reset all</button>
-        <button class="btn-solid" id="sheet-apply">Show results</button>
+        <button class="btn-ghost" id="sheet-reset" title="Clears type, language, year, age, rating, genre and platform">Reset all</button>
+        <button class="btn-solid" id="sheet-apply">Show titles</button>
       </div>
     </div>
   </div>
@@ -274,6 +311,6 @@
   </div>
 
   <script src="data/titles.js?v=19"></script>
-  <script src="js/app.js?v=37"></script>
+  <script src="js/app.js?v=38"></script>
 </body>
 </html>

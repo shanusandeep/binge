@@ -25,9 +25,14 @@
     age: "all",
     minRating: 0,
     sort: "rating",
+    platform: "all",
     q: "",
     watchedOnly: false,
   };
+  /* what the current view (Recent / All-time hits / none) sets by itself —
+     the mobile chips and funnel badge only count filters beyond this */
+  let presetBase = { year: "all", sort: "rating", minRating: 7 };
+  const setBase = () => { presetBase = { year: state.year, sort: state.sort, minRating: state.minRating }; };
 
   /* ---------- els ---------- */
   const $ = (s, el = document) => el.querySelector(s);
@@ -44,14 +49,17 @@
     themeBtn.innerHTML = eff === "light" ? ICON_MOON : ICON_SUN;
     themeBtn.title = eff === "light" ? "Switch to dark theme" : "Switch to light theme";
     themeBtn.setAttribute("aria-label", themeBtn.title);
+    const mt = $("#menu-theme");
+    if (mt) mt.textContent = eff === "light" ? "🌙 Dark theme" : "☀ Light theme";
   };
   paintThemeBtn();
-  themeBtn.addEventListener("click", () => {
+  const toggleTheme = () => {
     const next = effectiveTheme() === "light" ? "dark" : "light";
     localStorage.setItem(LS_THEME, next);
     document.documentElement.setAttribute("data-theme", next);
     paintThemeBtn();
-  });
+  };
+  themeBtn.addEventListener("click", toggleTheme);
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
     if (!localStorage.getItem(LS_THEME)) paintThemeBtn();
   });
@@ -184,6 +192,7 @@
       : TITLES.filter((t) =>
           (state.type === "all" || t.type === state.type) &&
           (state.lang === "all" || t.lang === state.lang) &&
+          (state.platform === "all" || platformKey(t) === state.platform) &&
           (!state.minRating || t.rating >= state.minRating || (!t.rating && isFresh(t))) &&
           (state.age === "all" ||
             (state.age === "kids" ? isKids(t) : ageBucket(t.cert) === state.age)) &&
@@ -264,6 +273,16 @@
     Intl.DateTimeFormat().resolvedOptions().timeZone || "");
   const regionPlatform = (t) =>
     (!isIndiaTZ && t.platformUs) ? t.platformUs : t.platform;
+  /* "Prime Video (Buy/Rent)" and "Prime Video" are the same filter choice */
+  const platformKey = (t) => regionPlatform(t).replace(/\s*\(Buy\/Rent\)$/, "");
+  const PLATFORMS = (() => {
+    const n = new Map();
+    for (const t of TITLES) {
+      const k = platformKey(t);
+      if (k && k !== "Streaming") n.set(k, (n.get(k) || 0) + 1);
+    }
+    return [...n.entries()].filter(([, c]) => c >= 8).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k]) => k);
+  })();
 
   const cardHTML = (t, i, tagArg) => {
     const tag = typeof tagArg === "string" ? tagArg : ""; // .map() hands us the array as arg 3
@@ -272,8 +291,10 @@
     const topBadge = tag ? `<span class="badge-top">${esc(tag)}</span>`
       : t.rating >= 8.5 ? `<span class="badge-top">All-time great</span>` : "";
     const glyph = t.title.trim()[0].toUpperCase();
+    // TMDB posters: serve the 342px rendition to phones (two-column grid ≈ 180px)
+    const tmdb500 = !!t.poster && t.poster.includes("image.tmdb.org/t/p/w500/");
     const img = t.poster
-      ? `<img class="poster-img" src="${esc(t.poster)}" alt="" loading="lazy" onerror="this.remove();this.closest('.poster').classList.remove('has-img')">`
+      ? `<img class="poster-img" src="${esc(t.poster)}"${tmdb500 ? ` srcset="${esc(t.poster.replace("/w500/", "/w342/"))} 342w, ${esc(t.poster)} 500w" sizes="(max-width: 720px) 46vw, 240px"` : ""} alt="" loading="lazy" decoding="async" onerror="this.remove();this.closest('.poster').classList.remove('has-img')">`
       : "";
     const isWatched = watchedSet.has(titleKey(t));
     return `
@@ -289,6 +310,7 @@
         <h3 class="poster-word">${esc(t.title)}</h3>
       </div>
       <div class="card-body">
+        <h3 class="card-title">${esc(t.title)}</h3>
         <p class="card-meta">
           <span class="type-tag">${typeTag}</span><span class="dot">·</span>
           <span>${t.year}</span><span class="dot">·</span>
@@ -322,28 +344,50 @@
     $("#btn-clear").hidden = !isFiltered();
     const wc = $("#watched-count");
     if (wc) wc.textContent = watchedSet.size ? `(${watchedSet.size})` : "";
-    /* focused mode: filters/preset active → hide hero & rail, results on top.
-       The 7+ toggle's two home states (on=7 / off=0) don't count as focus. */
+    /* focused mode: the visitor is actively narrowing (filters beyond what the
+       current view sets itself, a search, the watchlist) → hide hero & rails,
+       results on top. The view's own defaults (Recent = this year, newest)
+       are not "focus" — otherwise the home page would never show the rails. */
+    const extras = extraFilters();
     document.body.classList.toggle("is-focused",
-      state.type !== "all" || state.lang !== "all" || state.year !== "all" ||
-      state.age !== "all" || state.genres.size > 0 || state.q !== "" ||
-      ![0, 7].includes(state.minRating));
+      extras.length > 0 || state.q !== "" || state.watchedOnly);
     syncURL();
 
-    /* header 7+ toggle mirrors the min-rating filter */
-    const seven = $("#btn-seven");
-    seven.classList.toggle("is-on", state.minRating >= 7);
-    seven.setAttribute("aria-pressed", state.minRating >= 7);
+    /* the 7+ toggles (header + mobile toolbar) mirror the min-rating filter */
+    for (const seven of $$("#btn-seven, #btn-seven-m")) {
+      seven.classList.toggle("is-on", state.minRating >= 7);
+      seven.setAttribute("aria-pressed", state.minRating >= 7);
+    }
 
-    /* mobile funnel badge + inline count */
-    const activeCount =
-      (state.type !== "all") + (state.lang !== "all") + (state.year !== "all") +
-      (state.age !== "all") + (state.minRating > 0) + (state.genres.size > 0);
+    /* mobile: funnel badge, removable chips and the single count — "extra"
+       means beyond what the current view (Recent / All-time hits) sets itself */
     const badge = $("#filter-count");
-    badge.hidden = !activeCount;
-    badge.textContent = activeCount;
-    $("#mobile-results").textContent =
-      `${list.length} title${list.length === 1 ? "" : "s"}`;
+    badge.hidden = !extras.length;
+    badge.textContent = extras.length;
+    $("#mobile-results").textContent = `${list.length} title${list.length === 1 ? "" : "s"}`;
+    $("#sheet-apply").textContent = `Show ${list.length} title${list.length === 1 ? "" : "s"}`;
+    document.body.classList.toggle("has-filters", extras.length > 0 || state.q !== "");
+    renderActiveChips(extras);
+  };
+
+  const extraFilters = () => {
+    const opt = (sel, v) => $(`${sel} option[value="${v}"]`)?.textContent || v;
+    const x = [];
+    if (state.type !== "all") x.push({ key: "type", label: state.type === "movie" ? "Movies" : "Series" });
+    if (state.lang !== "all") x.push({ key: "lang", label: state.lang === "hi" ? "हिंदी" : "English" });
+    if (state.year !== presetBase.year) x.push({ key: "year", label: opt("#year-select", state.year) });
+    if (state.age !== "all") x.push({ key: "age", label: opt("#age-select", state.age) });
+    if (state.minRating !== presetBase.minRating) x.push({ key: "min", label: state.minRating ? `IMDb ${state.minRating}+` : "Any rating" });
+    if (state.sort !== presetBase.sort) x.push({ key: "sort", label: opt("#sort-select", state.sort) });
+    for (const g of state.genres) x.push({ key: "genre", value: g, label: g });
+    if (state.platform !== "all") x.push({ key: "platform", label: state.platform });
+    return x;
+  };
+  const renderActiveChips = (extras) => {
+    const row = $("#active-chips");
+    row.hidden = !extras.length;
+    row.innerHTML = extras.map((f) =>
+      `<button type="button" class="mchip" data-chip="${f.key}" data-value="${esc(f.value || "")}" aria-label="Remove filter: ${esc(f.label)}">${esc(f.label)} <b aria-hidden="true">×</b></button>`).join("");
   };
 
   /* ---------- shareable filter URLs ---------- */
@@ -358,6 +402,7 @@
     if (state.sort !== "rating") p.set("sort", state.sort);
     if (state.age !== "all") p.set("age", state.age);
     if (state.minRating !== 7) p.set("min", String(state.minRating));
+    if (state.platform !== "all") p.set("pf", state.platform);
     if (state.genres.size) p.set("g", [...state.genres].join(","));
     if (state.q) p.set("q", state.q);
     const qs = p.toString();
@@ -382,6 +427,8 @@
       const gs = g.split(",").filter((x) => allGenres.includes(x));
       if (gs.length) state.genres = new Set(gs);
     }
+    const pf = p.get("pf");
+    if (pf && PLATFORMS.includes(pf)) state.platform = pf;
     const q = p.get("q");
     if (q) {
       state.q = q.toLowerCase();
@@ -389,7 +436,13 @@
       document.body.classList.add("is-searching");
       $("#search-clear").hidden = false;
     }
-    /* reflect everything in the widgets */
+    syncControls();
+    renderChips();
+    renderGrid();
+  };
+
+  /* reflect the filter state in every control widget */
+  const syncControls = () => {
     $$(".seg-btn[data-type]").forEach((b) => b.classList.toggle("is-active", b.dataset.type === state.type));
     $$(".seg-btn[data-lang]").forEach((b) => b.classList.toggle("is-active", b.dataset.lang === state.lang));
     $("#year-select").value = state.year;
@@ -397,12 +450,27 @@
     $("#age-select").value = state.age;
     $("#rating-select").value = String(state.minRating || 0);
     $("#rating-select").classList.toggle("is-set", state.minRating > 0);
-    renderChips();
-    renderGrid();
+    renderPlatformRow();
+  };
+
+  /* remembered between visits: the browsing preferences that are about the
+     person, not the moment — type, language, platform. Year/sort/rating
+     follow the view (Recent / All-time hits) instead. */
+  const LS_FILTERS = "binge.filters";
+  const savePrefs = () => {
+    try { localStorage.setItem(LS_FILTERS, JSON.stringify({ type: state.type, lang: state.lang, platform: state.platform })); } catch {}
+  };
+  const loadPrefs = () => {
+    try {
+      const p = JSON.parse(localStorage.getItem(LS_FILTERS) || "{}");
+      if (["movie", "series"].includes(p.type)) state.type = p.type;
+      if (["hi", "en"].includes(p.lang)) state.lang = p.lang;
+      if (PLATFORMS.includes(p.platform)) state.platform = p.platform;
+    } catch {}
   };
 
   const isFiltered = () =>
-    state.type !== "all" || state.lang !== "all" || state.genres.size > 0 ||
+    state.type !== "all" || state.lang !== "all" || state.genres.size > 0 || state.platform !== "all" ||
     state.year !== "all" || state.age !== "all" || state.minRating > 0 ||
     state.q !== "" || state.watchedOnly;
 
@@ -604,9 +672,16 @@
     }
   };
   accountBtn.addEventListener("click", () => {
-    if (!user) openSignin();
-    else accountMenu.hidden = !accountMenu.hidden;
+    // desktop guests go straight to sign-in; on mobile the menu also holds
+    // My Genres / theme / refresh, so it opens for everyone
+    if (!user && !mqMobile.matches) return openSignin();
+    accountMenu.classList.toggle("is-guest", !user);
+    accountMenu.hidden = !accountMenu.hidden;
   });
+  $("#menu-signin").addEventListener("click", () => { accountMenu.hidden = true; openSignin(); });
+  $("#menu-my-genres").addEventListener("click", () => { accountMenu.hidden = true; openModal(); });
+  $("#menu-theme").addEventListener("click", toggleTheme);
+  $("#menu-sync").addEventListener("click", () => { accountMenu.hidden = true; $("#btn-sync").click(); });
   $("#btn-signout").addEventListener("click", async () => {
     try { await fetch("/api/logout", { method: "POST" }); } catch {}
     user = null;
@@ -779,7 +854,8 @@
 
   const closeDetail = () => {
     detailVeil.hidden = true;
-    document.body.style.overflow = "";
+    // back into the search overlay if that's where we came from
+    document.body.style.overflow = $("#msearch").hidden ? "" : "hidden";
   };
 
   /* open on card click / Enter — rating badge and platform links are left alone */
@@ -1042,6 +1118,7 @@
   };
   genreToggle.addEventListener("click", (e) => {
     e.stopPropagation();
+    closePlatforms();
     const open = genreRow.hidden;
     genreRow.hidden = !open;
     genreToggle.setAttribute("aria-expanded", String(open));
@@ -1050,10 +1127,39 @@
   document.addEventListener("click", () => closeGenres());
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeGenres(); });
 
+  /* platform dropdown — same look as genres, single choice */
+  const platformToggle = $("#platform-toggle"), platformRow = $("#platform-row");
+  const renderPlatformRow = () => {
+    $("#platform-label").textContent = state.platform === "all" ? "All platforms" : state.platform;
+    platformToggle.classList.toggle("is-set", state.platform !== "all");
+    platformRow.innerHTML = [["all", "All platforms"], ...PLATFORMS.map((p) => [p, p])].map(([v, l]) =>
+      `<button type="button" class="chip ${state.platform === v ? "is-active" : ""}" data-platform="${esc(v)}">${esc(l)}</button>`).join("");
+  };
+  const closePlatforms = () => { platformRow.hidden = true; platformToggle.setAttribute("aria-expanded", "false"); };
+  platformToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeGenres();
+    const open = platformRow.hidden;
+    platformRow.hidden = !open;
+    platformToggle.setAttribute("aria-expanded", String(open));
+  });
+  platformRow.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const b = e.target.closest("[data-platform]");
+    if (!b) return;
+    state.platform = b.dataset.platform;
+    renderPlatformRow();
+    closePlatforms();
+    renderGrid();
+  });
+  document.addEventListener("click", closePlatforms);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePlatforms(); });
+  renderPlatformRow();
+
   const clearAll = () => {
-    state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all";
+    state.type = "all"; state.lang = "all"; state.year = "all"; state.age = "all"; state.platform = "all";
     $("#age-select").value = "all";
-    $$(".top-link").forEach((b) => b.classList.remove("is-active"));
+    $$("[data-preset]").forEach((b) => b.classList.remove("is-active"));
     state.minRating = 0; state.q = ""; state.genres.clear();
     state.watchedOnly = false;
     document.body.classList.remove("is-watchlist");
@@ -1064,6 +1170,8 @@
     $("#rating-select").value = "0";
     $("#rating-select").classList.remove("is-set");
     $$(".seg-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "all" || b.dataset.lang === "all"));
+    setBase();
+    syncControls();
     renderChips();
     renderGrid();
   };
@@ -1093,18 +1201,19 @@
       $("#rating-select").value = "8";
       $("#rating-select").classList.add("is-set");
     }
+    setBase();
     renderGrid();
-    $$(".top-link").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
+    $$("[data-preset]").forEach((b) => b.classList.toggle("is-active", b.dataset.preset === name));
     if (push) ga("event", "select_content", { content_type: "preset", item_id: name }); // not on every home load
     if (push && location.pathname !== PRESET_PATH[name])
       history.pushState({}, "", PRESET_PATH[name]);
     if (scroll) $("#filterbar").scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  $$(".top-link[data-preset]").forEach((b) =>
+  $$("[data-preset]").forEach((b) =>
     b.addEventListener("click", () => applyPreset(b.dataset.preset)));
 
   /* header 7+ toggle: one tap to hide anything under IMDb 7 */
-  $("#btn-seven").addEventListener("click", () => {
+  for (const b of $$("#btn-seven, #btn-seven-m")) b.addEventListener("click", () => {
     state.minRating = state.minRating >= 7 ? 0 : 7;
     $("#rating-select").value = String(state.minRating || 0);
     $("#rating-select").classList.toggle("is-set", state.minRating > 0);
@@ -1147,7 +1256,8 @@
     const sheet = $("#sheet-veil");
     if (!detailVeil.hidden) closeDetail();
     else if (!signinVeil.hidden) closeSignin();
-    else if (sheet && !sheet.hidden) { sheet.hidden = true; document.body.style.overflow = ""; }
+    else if (!$("#msearch").hidden) closeMSearch();
+    else if (sheet && !sheet.hidden) closeSheet();
     else if (!modalVeil.hidden) closeModal();
   });
 
@@ -1169,6 +1279,100 @@
     forYouSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
+  /* ---------- mobile search overlay ----------
+     Full-screen, opened from the header icon. Runs on the in-memory
+     catalogue so results are immediate; the homepage's own filters and
+     scroll position are never touched, so closing it is a clean return. */
+  const msearch = $("#msearch"), msInput = $("#msearch-input"), msResults = $("#msearch-results"), msClear = $("#msearch-clear");
+  let msReturnTo = null, msScrollY = 0;
+  const matchesQuery = (t, q) =>
+    t.title.toLowerCase().includes(q) ||
+    (t.collection || "").toLowerCase().includes(q) ||
+    (t.director || "").toLowerCase().includes(q) ||
+    (t.cast || []).some((a) => a.toLowerCase().includes(q));
+  const msRow = (t) => {
+    const src = t.poster && t.poster.includes("image.tmdb.org/t/p/w500/") ? t.poster.replace("/w500/", "/w92/") : t.poster;
+    const thumb = t.poster
+      ? `<img class="msr-thumb" src="${esc(src)}" alt="" loading="lazy" width="40" height="60">`
+      : `<span class="msr-thumb" aria-hidden="true">${esc(t.title.trim()[0].toUpperCase())}</span>`;
+    const plat = platformKey(t);
+    return `<button type="button" class="msr" role="option" data-id="${t._id}">
+      ${thumb}
+      <span class="msr-meta">
+        <span class="msr-title">${esc(t.title)}</span>
+        <span class="msr-sub">${t.year} · ${t.type === "movie" ? "Film" : "Series"} · <span class="lang-tag">${t.lang === "hi" ? "हिंदी" : "English"}</span>${plat && plat !== "Streaming" ? ` · ${esc(plat)}` : ""}</span>
+      </span>
+      ${t.rating ? `<span class="msr-rating">★ ${t.rating.toFixed(1)}</span>` : `<span class="msr-rating is-new">New</span>`}
+    </button>`;
+  };
+  const renderMSearch = () => {
+    const raw = msInput.value, q = raw.trim().toLowerCase();
+    msClear.hidden = !raw;
+    if (!TITLES.length) {
+      msResults.innerHTML = `<p class="msearch-state is-error"><b>The catalogue didn't load</b>Check your connection, then <button type="button" class="auth-link" onclick="location.reload()">reload</button>.</p>`;
+      return;
+    }
+    if (!q) {
+      msResults.innerHTML = `<p class="msearch-state"><b>Search Binge</b>Titles, actors, directors — try “Pankaj Tripathi” or “Mirzapur”.</p>`;
+      return;
+    }
+    const rank = (t) => t.title.toLowerCase().startsWith(q) ? 2 : t.title.toLowerCase().includes(q) ? 1 : 0;
+    const list = TITLES.filter((t) => matchesQuery(t, q))
+      .sort((a, b) => rank(b) - rank(a) || b.rating - a.rating)
+      .slice(0, 40);
+    msResults.innerHTML = list.length
+      ? list.map(msRow).join("")
+      : `<p class="msearch-state"><b>No matches</b>Nothing for “${esc(raw.trim())}” — try a shorter word or another spelling.</p>`;
+  };
+  const fitMSearch = () => {
+    const vv = window.visualViewport;
+    msearch.style.setProperty("--vvh", vv ? `${vv.height}px` : "100dvh");
+  };
+  const openMSearch = () => {
+    msReturnTo = document.activeElement;
+    msScrollY = window.scrollY;
+    msearch.hidden = false;
+    document.body.style.overflow = "hidden";
+    fitMSearch();
+    window.visualViewport?.addEventListener("resize", fitMSearch);
+    renderMSearch();
+    msInput.focus(); // synchronous, inside the tap → the phone's keyboard opens
+  };
+  const closeMSearch = () => {
+    if (msearch.hidden) return;
+    msearch.hidden = true;
+    document.body.style.overflow = "";
+    window.visualViewport?.removeEventListener("resize", fitMSearch);
+    window.scrollTo(0, msScrollY);
+    // iOS Safari doesn't focus a tapped button, so the opener is often <body>
+    const back = msReturnTo && msReturnTo !== document.body && !msearch.contains(msReturnTo) ? msReturnTo : $("#btn-search-open");
+    back.focus();
+  };
+  $("#btn-search-open").addEventListener("click", openMSearch);
+  $("#msearch-back").addEventListener("click", closeMSearch);
+  msClear.addEventListener("click", () => { msInput.value = ""; renderMSearch(); msInput.focus(); });
+  msInput.addEventListener("input", renderMSearch);
+  msInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); msInput.blur(); }   // tuck the keyboard away; results fill the screen
+    if (e.key === "Escape") { e.preventDefault(); closeMSearch(); }
+  });
+  msResults.addEventListener("click", (e) => {
+    const row = e.target.closest(".msr");
+    if (!row) return;
+    const t = TITLES[Number(row.dataset.id)];
+    if (!t) return;
+    openDetail(t);
+    ga("event", "search_suggest_click", { type: "title", value: t.title, source: "mobile" });
+  });
+  msearch.addEventListener("keydown", (e) => { // keep Tab inside the dialog
+    if (e.key !== "Tab") return;
+    const f = $$("button:not([hidden]), input", msearch);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
   /* ---------- mobile filter sheet ---------- */
   const sheetVeil = $("#sheet-veil");
   const sheetBody = $("#sheet-body");
@@ -1177,11 +1381,27 @@
   const mobileRow = $("#mobile-filter-row");
   const mqMobile = matchMedia("(max-width: 720px)");
 
-  const openSheet = () => { sheetVeil.hidden = false; document.body.style.overflow = "hidden"; };
-  const closeSheet = () => {
+  /* Draft semantics: the controls in the sheet edit the live state (so the
+     "Show N titles" count is exact and the grid behind is honest), but a
+     snapshot taken on open is restored if the sheet is dismissed rather
+     than applied. */
+  const snapshotState = () => ({ ...state, genres: new Set(state.genres) });
+  const restoreState = (s) => { Object.assign(state, s, { genres: new Set(s.genres) }); };
+  let sheetSnapshot = null;
+  const openSheet = () => {
+    sheetSnapshot = snapshotState();
+    sheetVeil.hidden = false;
+    document.body.style.overflow = "hidden";
+    renderGrid(); // refresh the "Show N titles" label
+  };
+  const closeSheet = ({ apply = false } = {}) => {
     if (sheetVeil.hidden) return;
+    if (!apply && sheetSnapshot) { restoreState(sheetSnapshot); syncControls(); renderChips(); }
+    sheetSnapshot = null;
     sheetVeil.hidden = true;
     document.body.style.overflow = "";
+    renderGrid();
+    if (apply) { savePrefs(); ga("event", "filters_apply", { count: extraFilters().length }); }
   };
 
   /* the real filter controls MOVE between the bar and the sheet, so all
@@ -1192,9 +1412,11 @@
     if (mobile === sheetBody.contains(rowTop)) return; // already in place
     if (mobile) {
       sheetBody.append(rowTop);
+      $(".site-header").after(filterbar);   // tabs + toolbar sit right under the header
     } else {
       closeSheet();
       filterbar.append(rowTop);
+      $("main.results").before(filterbar);
     }
   };
   mqMobile.addEventListener("change", layoutFilters);
@@ -1202,9 +1424,32 @@
   setInterval(layoutFilters, 1000); // belt & braces: some webviews fire neither event
 
   $("#btn-filters").addEventListener("click", openSheet);
-  $("#sheet-apply").addEventListener("click", closeSheet);
-  $("#sheet-reset").addEventListener("click", () => { clearAll(); resetRoute(); });
+  $("#sheet-apply").addEventListener("click", () => closeSheet({ apply: true }));
+  /* Reset = every control in this sheet back to the view's own defaults;
+     still a draft until Show is tapped. Keeps Recent / All-time hits. */
+  $("#sheet-reset").addEventListener("click", () => {
+    state.type = "all"; state.lang = "all"; state.age = "all"; state.platform = "all";
+    state.genres.clear();
+    state.year = presetBase.year; state.sort = presetBase.sort; state.minRating = presetBase.minRating;
+    syncControls(); renderChips(); renderGrid();
+  });
   sheetVeil.addEventListener("click", (e) => { if (e.target === sheetVeil) closeSheet(); });
+
+  /* removable chips under the toolbar */
+  $("#active-chips").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-chip]");
+    if (!chip) return;
+    const k = chip.dataset.chip;
+    if (k === "type") state.type = "all";
+    else if (k === "lang") state.lang = "all";
+    else if (k === "year") state.year = presetBase.year;
+    else if (k === "age") state.age = "all";
+    else if (k === "min") state.minRating = presetBase.minRating;
+    else if (k === "sort") state.sort = presetBase.sort;
+    else if (k === "genre") state.genres.delete(chip.dataset.value);
+    else if (k === "platform") state.platform = "all";
+    syncControls(); renderChips(); renderGrid(); savePrefs();
+  });
 
   /* ---------- boot ---------- */
   const applyDefaultRating = () => {
@@ -1222,6 +1467,7 @@
   /* the home page IS the "Recent" view — newest first, this year's releases */
   const bootPreset = PATH_PRESET[location.pathname] || (["/", "/index.html"].includes(location.pathname) ? "recent" : null);
   if (bootPreset) applyPreset(bootPreset, { push: false, scroll: false });
+  if (![...BOOT_PARAMS.keys()].length) { loadPrefs(); syncControls(); renderChips(); renderGrid(); } // remembered type / language / platform
   applyParams(); // shared-URL filters layer on top of any preset defaults
   /* password-reset deep link: /reset?token=… */
   if (location.pathname === "/reset") {
