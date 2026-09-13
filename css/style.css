@@ -1460,11 +1460,13 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
 
 @media (max-width: 720px) {
   /* header: logo · search · profile on one row */
-  /* header: just the wordmark — search and profile live in the bottom bar */
-  .site-header { flex-wrap: nowrap; padding: 10px 14px 6px; gap: 8px; }
+  /* header: wordmark · Recent ▾ · funnel — the only row above the posters.
+     Search and profile live in the bottom bar. */
+  .site-header { position: sticky; top: 0; z-index: 50; flex-wrap: nowrap; padding: 6px 8px 6px 14px; gap: 8px; }
   .top-nav, .btn-theme, .btn-genres, .search-wrap, .btn-account { display: none; }
-  .header-actions { order: 0; width: auto; margin-left: auto; gap: 2px; }
+  .header-actions { order: 0; width: auto; margin-left: auto; gap: 6px; }
   .logo-word { font-size: 1.6rem; }
+  .filterbar { display: none; }   /* its controls are in the header (JS) and the sheet */
   /* the account menu rises from the bottom bar's Profile tab */
   .account-menu {
     position: fixed; left: 12px; right: 12px; top: auto;
@@ -1485,7 +1487,7 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
   /* tabs + one toolbar right under the header (JS moves the bar there) */
   .filterbar { padding: 6px 12px 0; margin-top: 0; }
   .mobile-filter-row { display: block; padding-bottom: 8px; }
-  /* ONE control row: Recent ▾ · Filters (badge) · ★ 7+ — fits 320px */
+  /* Recent ▾ · funnel (badge) — sits in the header row */
   .mtoolbar { display: flex; align-items: center; gap: 6px; }
   .mmode-wrap { position: relative; flex: 0 0 auto; }
   .mmode {
@@ -1499,7 +1501,7 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
   .mmode svg { color: var(--text-faint); }
   .mmode-panel[hidden] { display: none; }
   .mmode-panel {
-    position: absolute; z-index: 60; top: calc(100% + 6px); left: 0;
+    position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; left: auto;
     min-width: 172px;
     display: flex; flex-direction: column;
     background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px;
@@ -1515,16 +1517,14 @@ body.is-searching .site-header, body.is-focused .site-header { position: sticky;
     cursor: pointer;
   }
   .mmode-panel button.is-active { color: var(--saffron); background: color-mix(in srgb, var(--saffron) 10%, transparent); }
-  .btn-filters { flex: 1 1 auto; justify-content: center; min-height: 40px; padding: 7px 10px; font-size: 0.86rem; }
-  .mtoggle {
-    flex: 0 0 auto;
-    min-height: 40px; padding: 7px 12px;
-    font: 700 0.86rem var(--font-body);
-    color: var(--text-dim);
-    background: var(--bg-3); border: 1px solid var(--line); border-radius: 999px;
-    cursor: pointer; white-space: nowrap;
+  .btn-filters {
+    position: relative; flex: 0 0 auto;
+    width: 44px; height: 44px; padding: 0;
+    justify-content: center; border-radius: 50%;
   }
-  .mtoggle.is-on { color: #140d02; background: var(--imdb); border-color: var(--imdb); }
+  .btn-filters svg { width: 20px; height: 20px; }
+  .btn-filters-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .btn-filters .filter-count { position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px; font-size: 0.66rem; }
 
   /* featured banner — short, landscape, one real title */
   .featured { display: block; padding: 10px 12px 0; }

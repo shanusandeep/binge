@@ -357,7 +357,7 @@
     syncURL();
 
     /* the 7+ toggles (header + mobile toolbar) mirror the min-rating filter */
-    for (const seven of $$("#btn-seven, #btn-seven-m")) {
+    for (const seven of $$("#btn-seven")) {
       seven.classList.toggle("is-on", state.minRating >= 7);
       seven.setAttribute("aria-pressed", state.minRating >= 7);
     }
@@ -1284,7 +1284,7 @@
     b.addEventListener("click", () => applyPreset(b.dataset.preset)));
 
   /* header 7+ toggle: one tap to hide anything under IMDb 7 */
-  for (const b of $$("#btn-seven, #btn-seven-m")) b.addEventListener("click", () => {
+  for (const b of $$("#btn-seven")) b.addEventListener("click", () => {
     state.minRating = state.minRating >= 7 ? 0 : 7;
     $("#rating-select").value = String(state.minRating || 0);
     $("#rating-select").classList.toggle("is-set", state.minRating > 0);
@@ -1524,15 +1524,15 @@
   const layoutFilters = () => {
     const mobile = mqMobile.matches;
     mobileRow.hidden = !mobile;
-    if (mobile === sheetBody.contains(rowTop)) return; // already in place
+    if (mobile === sheetBody.contains(rowTop) && mobile === $(".site-header").contains($(".mtoolbar"))) return; // already in place
     if (mobile) {
       sheetBody.append(rowTop);
-      $(".site-header").after(filterbar);   // the control row sits right under the header
-      document.body.append(accountMenu);    // menu rises above the bottom bar (header's backdrop-filter would trap position:fixed)
+      $(".header-actions").append($(".mtoolbar")); // Recent ▾ + funnel share the header row
+      document.body.append(accountMenu);           // menu rises above the bottom bar (header's backdrop-filter would trap position:fixed)
     } else {
       closeSheet();
       filterbar.append(rowTop);
-      $("main.results").before(filterbar);
+      mobileRow.append($(".mtoolbar"));
       $(".account-wrap").append(accountMenu);
     }
     renderGrid(); // featured banner / grid heading are viewport-dependent
