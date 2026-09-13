@@ -373,29 +373,38 @@ const pickCert = (list) => {
   return null;
 };
 
-let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0, usPlatFilled = 0, junkDropped = 0;
+let backfilled = 0, imdbFilled = 0, epsFilled = 0, certFilled = 0, relFilled = 0, platFilled = 0, usPlatFilled = 0, junkDropped = 0, castFilled = 0, dirFilled = 0;
 for (const t of existing.values()) {
   // still-running series get their episode count / last air date refreshed
   // every run so "new episodes" surface on the site; finished shows don't
   const liveSeries = t.type === "series" && (!t.lastAired || t.lastAired >= since);
-  if (!liveSeries && t.poster && t.imdb && t.cert && t.released && t.usChecked &&
+  const credited = t.cast?.length && (t.type === "series" || t.director);
+  if (!liveSeries && credited && t.poster && t.imdb && t.cert && t.released && t.usChecked &&
       !["Streaming", "Theatres"].includes(t.platform) && // re-check until OTT arrival
       (t.type === "movie" || t.episodes)) continue;
   try {
     const kind = t.type === "movie" ? "movie" : "tv";
-    const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
-    const d = await tmdb(`/search/${kind}`, params);
-    const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-    // strict prefix match in EITHER direction — a plain .includes() let
-    // "Sitaare Zameen Par" swallow "Taare Zameen Par" (and Rambo III / Rambo)
-    // because the substring happened to appear inside the longer title
-    const nt = norm(t.title);
-    const hit = (d.results || []).find((r) => {
-      const nr = norm(r.title || r.name);
-      if (!(nr === nt || nr.startsWith(nt) || nt.startsWith(nr))) return false;
-      const ry = Number((r.release_date || r.first_air_date || "").slice(0, 4));
-      return !ry || Math.abs(ry - t.year) <= 1; // TMDB's year param isn't strictly enforced
-    });
+    // exact lookup by IMDb id when we have one — no title-matching guesswork
+    let hit = null;
+    if (t.imdb) {
+      const f = await tmdb(`/find/${t.imdb}`, { external_source: "imdb_id" });
+      hit = (kind === "movie" ? f.movie_results : f.tv_results)?.[0] || null;
+    }
+    if (!hit) {
+      const params = { query: t.title, [t.type === "movie" ? "year" : "first_air_date_year"]: String(t.year) };
+      const d = await tmdb(`/search/${kind}`, params);
+      const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      // strict prefix match in EITHER direction — a plain .includes() let
+      // "Sitaare Zameen Par" swallow "Taare Zameen Par" (and Rambo III / Rambo)
+      // because the substring happened to appear inside the longer title
+      const nt = norm(t.title);
+      hit = (d.results || []).find((r) => {
+        const nr = norm(r.title || r.name);
+        if (!(nr === nt || nr.startsWith(nt) || nt.startsWith(nr))) return false;
+        const ry = Number((r.release_date || r.first_air_date || "").slice(0, 4));
+        return !ry || Math.abs(ry - t.year) <= 1; // TMDB's year param isn't strictly enforced
+      });
+    }
     if (!hit) continue;
     if (!t.poster && hit.poster_path) {
       t.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path}`;
@@ -406,8 +415,9 @@ for (const t of existing.values()) {
       const ext = await tmdb(`/${kind}/${hit.id}/external_ids`);
       if (/^tt\d+$/.test(ext.imdb_id || "")) { t.imdb = ext.imdb_id; imdbFilled++; }
     }
+    let det = null;
     if (t.type === "series" && (!t.episodes || liveSeries)) {
-      const det = await tmdb(`/tv/${hit.id}`);
+      det = await tmdb(`/tv/${hit.id}`);
       if (det.number_of_episodes) { if (!t.episodes) epsFilled++; t.episodes = det.number_of_episodes; }
       if (det.number_of_seasons) t.seasons = det.number_of_seasons;
       if (det.last_air_date) t.lastAired = det.last_air_date;
@@ -417,6 +427,21 @@ for (const t of existing.values()) {
         existing.delete(`${t.title.toLowerCase()}|${t.year}`);
         junkDropped++;
         continue;
+      }
+    }
+    // Cast & director straight from TMDB. enrich.mjs tries Wikipedia/Wikidata/
+    // Gemini first, but they barely cover new Hindi releases (a third of the
+    // catalogue had no cast at all); TMDB has credits for everything it lists.
+    if (!t.cast?.length || (t.type === "movie" && !t.director)) {
+      const cr = await tmdb(`/${kind}/${hit.id}/credits`);
+      if (!t.cast?.length) {
+        const cast = (cr.cast || []).slice(0, 6).map((c) => c.name).filter(Boolean);
+        if (cast.length) { t.cast = cast; castFilled++; }
+      }
+      if (!t.director) {
+        const dirs = (cr.crew || []).filter((c) => c.job === "Director").map((c) => c.name);
+        const names = dirs.length ? dirs : (det?.created_by || []).map((c) => c.name);
+        if (names.length) { t.director = [...new Set(names)].slice(0, 3).join(", "); dirFilled++; }
       }
     }
     if (!t.cert) {
@@ -452,7 +477,7 @@ for (const t of existing.values()) {
   } catch { /* leave as-is — will retry next sync */ }
   await sleep(60); // stay well clear of TMDB's rate limit across ~100+ rechecks
 }
-console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} IN platforms, ${usPlatFilled} US platforms${junkDropped ? `, ${junkDropped} soaps/reality dropped` : ""}`);
+console.log(`● backfill: ${backfilled} posters, ${imdbFilled} imdb ids, ${castFilled} casts, ${dirFilled} directors, ${epsFilled} episode counts, ${certFilled} certifications, ${relFilled} release dates, ${platFilled} IN platforms, ${usPlatFilled} US platforms${junkDropped ? `, ${junkDropped} soaps/reality dropped` : ""}`);
 
 /* ---------- seed iconic franchises ----------
    Collection expansion can only follow films we already hold, so seed the

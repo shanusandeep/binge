@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "17 0 * * *" # daily, ~05:50 IST (odd minute: GitHub queues :00/:30 crons for hours) — full sync: new releases, posters,
                          # IMDb ids & exact ratings, certs, episodes
+    # Afternoon top-up (~18:40 IST): IMDb's daily dataset and TMDB popularity
+    # both lag a release by a day or so — a title out on Friday shows "New"
+    # with no rating and may miss the morning sweep entirely. This run skips
+    # the Gemini steps (quota) and just re-syncs TMDB + IMDb ratings.
+    - cron: "7 13 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -29,6 +34,7 @@ jobs:
         with:
           node-version: 20
       - name: Discover new releases (Gemini + Google Search)
+        if: github.event.schedule != '7 13 * * *'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
@@ -40,6 +46,7 @@ jobs:
         run: |
           if [ -n "$TMDB_API_KEY" ]; then node scripts/sync.mjs; else echo "no TMDB_API_KEY — skipping"; fi
       - name: Enrich new titles (posters, cast, IMDb ids)
+        if: github.event.schedule != '7 13 * * *'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
