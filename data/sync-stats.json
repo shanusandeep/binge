@@ -1,9 +1,9 @@
 {
   "sync": {
-    "at": "2026-09-13T17:02:15.548Z",
-    "durationSec": 343,
+    "at": "2026-09-14T05:25:27.476Z",
+    "durationSec": 185,
     "added": 19,
-    "refreshed": 20,
+    "refreshed": 21,
     "total": 1453,
     "calls": {
       "tmdb": 3508,
@@ -12,10 +12,10 @@
     }
   },
   "enrich": {
-    "at": "2026-09-13T16:27:19.272Z",
+    "at": "2026-09-14T06:04:15.407Z",
     "calls": {
-      "wikipedia": 418,
-      "wikidata": 135,
+      "wikipedia": 401,
+      "wikidata": 161,
       "gemini": 15
     }
   }
