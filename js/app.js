@@ -242,7 +242,8 @@
   const PLATFORM_SEARCH = {
     "Netflix": (q) => `https://www.netflix.com/search?q=${q}`,
     "Prime Video": (q) => `https://www.primevideo.com/search?phrase=${q}`,
-    "Amazon MX Player": (q) => `https://www.primevideo.com/search?phrase=${q}`,
+    // (Amazon MX Player is its own free service, not Prime Video's catalogue —
+    // it falls through to the generic search below rather than to primevideo)
     "JioHotstar": (q) => `https://www.hotstar.com/in/search?q=${q}`,
     "Disney+": (q) => `https://www.disneyplus.com/search?q=${q}`,
     "Max": (q) => `https://www.max.com/search?q=${q}`,
@@ -288,6 +289,12 @@
     (!isIndiaTZ && t.platformUs) ? t.platformUs : t.platform;
   /* "Prime Video (Buy/Rent)" and "Prime Video" are the same filter choice */
   const platformKey = (t) => regionPlatform(t).replace(/\s*\(Buy\/Rent\)$/, "");
+  /* "Streaming" is the placeholder for "TMDB lists no service here" — say
+     that plainly instead of implying we know where it plays */
+  const platformLabel = (t) => {
+    const p = regionPlatform(t);
+    return p === "Streaming" ? "Not listed" : p;
+  };
   const PLATFORMS = (() => {
     const n = new Map();
     for (const t of TITLES) {
@@ -340,8 +347,8 @@
             if (!isReleased(t)) return `<span class="card-platform">Not out yet</span>`;
             const url = platformURL(t);
             return url
-              ? `<a class="card-platform" href="${url}" target="_blank" rel="noopener" title="Find on ${esc(regionPlatform(t))}">${esc(regionPlatform(t))}</a>`
-              : `<span class="card-platform">${esc(regionPlatform(t))}</span>`;
+              ? `<a class="card-platform" href="${url}" target="_blank" rel="noopener" title="Find on ${esc(platformLabel(t))}">${esc(platformLabel(t))}</a>`
+              : `<span class="card-platform" title="No streaming service listed for your region">${esc(platformLabel(t))}</span>`;
           })()}
         </p>
       </div>
@@ -709,7 +716,7 @@
     const platEl = $("#detail-platform");
     const platUrl = isReleased(t) ? platformURL(t) : null;
     // where it lands isn't known until it's out — state the date, claim nothing
-    platEl.textContent = isReleased(t) ? regionPlatform(t) : `Releases ${shortDate(t.released)}`;
+    platEl.textContent = isReleased(t) ? platformLabel(t) : `Releases ${shortDate(t.released)}`;
     if (platUrl) { platEl.href = platUrl; platEl.classList.remove("is-plain"); }
     else { platEl.removeAttribute("href"); platEl.classList.add("is-plain"); }
     currentDetail = t;

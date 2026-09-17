@@ -358,6 +358,14 @@ const PROVIDER_NORMALISE = {
 // TMDB tacks on distributor/tier suffixes ("HBO Max Amazon Channel",
 // "Paramount Plus Premium") that only add noise to a card label — strip
 // them before the exact-match table above, so those still normalise cleanly.
+/* services a viewer can actually stream on — used to vet TMDB's "network"
+   field before it is shown as availability (see the backfill below) */
+const STREAMERS = new Set([
+  "Netflix", "Prime Video", "Amazon MX Player", "JioHotstar", "Disney+", "SonyLIV",
+  "ZEE5", "Hungama", "YouTube", "Apple TV+", "Max", "Hulu", "Peacock", "Paramount+",
+  "MUBI", "Lionsgate Play", "aha", "Sun NXT", "Eros Now", "ALTBalaji", "Ullu",
+  "Discovery+", "Crunchyroll", "Netflix Kids",
+]);
 const cleanProviderName = (raw) => {
   const stripped = raw
     .replace(/\s+(Amazon|Apple TV|Roku Premium)\s+Channels?$/i, "")
@@ -491,11 +499,27 @@ for (const t of existing.values()) {
       if (plat?.kind === "stream") { t.platform = plat.name; platFilled++; }
       else if (plat?.kind === "buy") { t.platform = `${plat.name} (Buy/Rent)`; platFilled++; }
       else if (["Streaming", "Theatres"].includes(t.platform)) {
+        // TMDB frequently has no watch-provider row for a brand-new Indian
+        // web series, but it does record the network that commissioned it —
+        // and for Indian TV that network IS the streaming service (Waiting
+        // Hai: Amazon MX Player). Sourced from TMDB, not inferred.
+        if (t.type === "series") {
+          det = det || await tmdb(`/tv/${hit.id}`);
+          const net = cleanProviderName(det.networks?.[0]?.name || "");
+          // …but only when that network is somewhere you actually stream.
+          // For an older broadcast show TMDB's network is the channel it
+          // aired on (Cartoon Network, NBC, Fuji TV) — true, yet not an
+          // answer to "where can I watch this", so those stay unresolved
+          // rather than masquerade as availability.
+          if (STREAMERS.has(net)) { t.platform = net; platFilled++; }
+        }
         // No India provider info anywhere. "Theatres" is only a truthful
         // label for a genuinely recent release still awaiting OTT — never
         // stamp it on an old catalog title just because TMDB lacks data.
-        const days = t.released ? (Date.now() - new Date(t.released).getTime()) / 864e5 : 9999;
-        if (t.type === "movie" && days >= 0 && days <= 180) t.platform = "Theatres";
+        if (["Streaming", "Theatres"].includes(t.platform)) {
+          const days = t.released ? (Date.now() - new Date(t.released).getTime()) / 864e5 : 9999;
+          if (t.type === "movie" && days >= 0 && days <= 180) t.platform = "Theatres";
+        }
       }
       // US availability, shown to US visitors in place of the India platform
       // (JioHotstar/ZEE5/SonyLIV mean nothing outside India) — separate field
