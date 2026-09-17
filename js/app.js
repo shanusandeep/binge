@@ -158,7 +158,15 @@
 
   const daysAgo = (d) => (Date.now() - new Date(d + "T00:00:00").getTime()) / 864e5;
   /* just released — no IMDb score yet, so the rating bar mustn't hide it */
-  const isFresh = (t) => !!t.released && daysAgo(t.released) <= 30;
+  const isFresh = (t) => !!t.released && daysAgo(t.released) >= 0 && daysAgo(t.released) <= 30;
+  /* Announced but not out yet. These carry no rating and no platform, so they
+     have no business in Recent / New arrivals — they get their own shelf. */
+  const todayLocal = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  };
+  const isReleased = (t) => !t.released || t.released <= todayLocal();
+  const shortDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
   const yearMatch = (t) => {
     const y = t.year, f = state.year;
@@ -193,10 +201,12 @@
             TITLES.filter((t) => t.collection && cols.has(t.collection) && !ids.has(t._id)));
         })()
       : TITLES.filter((t) =>
+          /* browsing shows what's out; the Upcoming view shows what isn't */
+          (seeAll === "upcoming" ? !isReleased(t) : isReleased(t)) &&
           (state.type === "all" || t.type === state.type) &&
           (state.lang === "all" || t.lang === state.lang) &&
           (state.platform === "all" || platformKey(t) === state.platform) &&
-          (!state.minRating || t.rating >= state.minRating || (!t.rating && isFresh(t))) &&
+          (!state.minRating || t.rating >= state.minRating || (!t.rating && (isFresh(t) || !isReleased(t)))) &&
           (state.age === "all" ||
             (state.age === "kids" ? isKids(t) : ageBucket(t.cert) === state.age)) &&
           yearMatch(t) &&
@@ -307,6 +317,8 @@
         <span class="poster-glyph" aria-hidden="true">${glyph}</span>
         ${t.rating
           ? `<a class="badge-rating" href="${imdbURL(t)}" target="_blank" rel="noopener" title="Open on IMDb" aria-label="IMDb rating ${t.rating.toFixed(1)} — open on IMDb">${IMDB_SVG}${t.rating.toFixed(1)}</a>`
+          : !isReleased(t)
+          ? `<span class="badge-rating badge-soon" title="Releases ${esc(shortDate(t.released))}">${esc(shortDate(t.released))}</span>`
           : `<span class="badge-rating badge-new" title="Just released — not rated yet">New</span>`}
         ${topBadge}
         ${isWatched ? `<span class="watched-badge">✓ Watched</span>` : ""}
@@ -324,6 +336,8 @@
         <p class="card-foot">
           <span class="card-genres">${t.genres.slice(0, 2).join(" / ")}</span>
           ${(() => {
+            // nothing streams a film that isn't out — say so instead
+            if (!isReleased(t)) return `<span class="card-platform">Not out yet</span>`;
             const url = platformURL(t);
             return url
               ? `<a class="card-platform" href="${url}" target="_blank" rel="noopener" title="Find on ${esc(regionPlatform(t))}">${esc(regionPlatform(t))}</a>`
@@ -421,6 +435,7 @@
       state.watchedOnly ? "Watched" :
       state.q ? `Results for “${$("#search-input").value.trim()}”` :
       seeAll === "new" ? "New arrivals" :
+      seeAll === "upcoming" ? "Upcoming releases" :
       seeAll === "picks" ? "Picked for you" :
       extras.length ? "Filtered titles" :
       presetBase.sort === "newest" ? "Recent releases" : "All-time hits";
@@ -575,7 +590,8 @@
      aired an episode in the window (lastAired, refreshed nightly) */
   const renderThisWeek = () => {
     const WINDOW = 10;
-    const inWindow = (d) => !!d && daysAgo(d) >= -1 && daysAgo(d) <= WINDOW;
+    const inWindow = (d) => !!d && daysAgo(d) >= 0 && daysAgo(d) <= WINDOW; // out already
+
     const picks = TITLES
       .map((t) => {
         if (inWindow(t.released))
@@ -590,6 +606,20 @@
     thisWeekSection.hidden = !picks.length;
     if (!picks.length) return;
     thisWeekRail.innerHTML = picks.map((p, i) => cardHTML(p.t, i, p.tag)).join("");
+  };
+
+  /* ---------- render: upcoming rail ----------
+     Announced, not out yet. Soonest first, and the card badge carries the
+     release date instead of a rating (there isn't one yet). */
+  const renderUpcoming = () => {
+    const sec = $("#upcoming-section");
+    const picks = TITLES
+      .filter((t) => !isReleased(t) && t.poster)
+      .sort((a, b) => a.released.localeCompare(b.released) || b.year - a.year)
+      .slice(0, 14);
+    sec.hidden = !picks.length || state.watchedOnly;
+    if (sec.hidden) return;
+    $("#upcoming-rail").innerHTML = picks.map((t, i) => cardHTML(t, i)).join("");
   };
 
   /* ---------- render: hero ---------- */
@@ -674,10 +704,12 @@
     }
     const link = $("#detail-imdb");
     link.href = imdbURL(t);
-    $("#detail-imdb-rating").textContent = t.rating ? t.rating.toFixed(1) + " / 10" : "Not rated yet";
+    $("#detail-imdb-rating").textContent = t.rating ? t.rating.toFixed(1) + " / 10"
+      : isReleased(t) ? "Not rated yet" : "Not out yet";
     const platEl = $("#detail-platform");
-    platEl.textContent = regionPlatform(t);
-    const platUrl = platformURL(t);
+    const platUrl = isReleased(t) ? platformURL(t) : null;
+    // where it lands isn't known until it's out — state the date, claim nothing
+    platEl.textContent = isReleased(t) ? regionPlatform(t) : `Releases ${shortDate(t.released)}`;
     if (platUrl) { platEl.href = platUrl; platEl.classList.remove("is-plain"); }
     else { platEl.removeAttribute("href"); platEl.classList.add("is-plain"); }
     currentDetail = t;
@@ -706,7 +738,7 @@
     ga("event", "mark_watched", { item_name: currentDetail.title, watched: on });
     updateWatchedBtn(currentDetail);
     renderGrid();
-    renderForYou(); renderThisWeek();
+    renderForYou(); renderThisWeek(); renderUpcoming();
     try {
       await fetch("/api/watched", {
         method: "POST",
@@ -750,7 +782,7 @@
     watchedSet.clear();
     refreshAccount();
     renderGrid();
-    renderForYou(); renderThisWeek();
+    renderForYou(); renderThisWeek(); renderUpcoming();
     if (currentDetail) updateWatchedBtn(currentDetail);
   });
   $("#btn-watchlist").addEventListener("click", () => showWatchlist());
@@ -772,7 +804,7 @@
     (d.watched || []).forEach((k) => watchedSet.add(k));
     refreshAccount();
     renderGrid();
-    renderForYou(); renderThisWeek();
+    renderForYou(); renderThisWeek(); renderUpcoming();
     if (currentDetail) updateWatchedBtn(currentDetail);
     closeSignin();
   };
@@ -909,7 +941,7 @@
       (d.watched || []).forEach((k) => watchedSet.add(k));
       refreshAccount();
       renderGrid();
-      renderForYou(); renderThisWeek();
+      renderForYou(); renderThisWeek(); renderUpcoming();
       if (location.pathname === "/watched" && watchedSet.size)
         showWatchlist({ push: false });
     })
@@ -1355,7 +1387,7 @@
     favGenres = [...modalSelection];
     saveFavs(favGenres);
     closeModal();
-    renderForYou(); renderThisWeek();
+    renderForYou(); renderThisWeek(); renderUpcoming();
     renderChips();
     forYouSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -1484,7 +1516,15 @@
     const b = e.target.closest("[data-seeall]");
     if (!b) return;
     history.pushState({ seeAll: b.dataset.seeall }, "", location.pathname + location.search);
-    if (b.dataset.seeall === "picks") {
+    if (b.dataset.seeall === "upcoming") {
+      /* no year / rating bar here — nothing announced has a score yet */
+      state.type = "all"; state.lang = "all"; state.age = "all"; state.platform = "all";
+      state.genres.clear(); state.q = ""; state.watchedOnly = false;
+      state.year = "all"; state.sort = "oldest"; state.minRating = 0;
+      setBase();
+      seeAll = "upcoming";
+      syncControls(); renderChips();
+    } else if (b.dataset.seeall === "picks") {
       state.genres = new Set(favGenres);
       state.sort = "rating";
       syncControls(); renderChips();
@@ -1573,7 +1613,7 @@
   applyDefaultRating(); // 7+ is the site default — Clear ✕ removes it
   renderHero();
   renderChips();
-  renderForYou(); renderThisWeek();
+  renderForYou(); renderThisWeek(); renderUpcoming();
   renderGrid();
   layoutFilters();
   setTimeout(layoutFilters, 400); // re-check once metrics settle (webview quirk)

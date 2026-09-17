@@ -751,6 +751,11 @@ a.badge-rating:hover {
   color: #fff; background: var(--chili);
   font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
 }
+/* not out yet — the badge carries the release date instead of a score */
+.badge-rating.badge-soon {
+  color: #140d02; background: var(--text);
+  font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+}
 .badge-top {
   position: absolute; top: 12px; right: 12px;
   font-size: 0.66rem; font-weight: 800;

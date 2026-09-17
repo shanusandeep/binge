@@ -189,6 +189,14 @@ const FRESH_DAYS = 14;
 const FRESH_POP = { hi: 2, en: 40 };
 const freshFrom = new Date(Date.now() - FRESH_DAYS * 864e5).toISOString().slice(0, 10);
 const freshTo = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+// Announced but not out yet, for the site's Upcoming shelf. Nobody has seen
+// these, so there are no votes anywhere — admitted on poster + popularity like
+// the fresh sweep. Pre-release popularity runs lower than release week, hence
+// the softer bars (Hindi scores are ~10× smaller than English throughout).
+const UPCOMING_DAYS = 45;
+const UPCOMING_POP = { hi: 1, en: 12 };
+const upFrom = freshTo;
+const upTo = new Date(Date.now() + UPCOMING_DAYS * 864e5).toISOString().slice(0, 10);
 const queries = [
   // Hindi-first: this is the heart of the catalogue
   ...Array.from({ length: PAGES }, (_, i) => ["movie", { with_original_language: "hi", sort_by: "popularity.desc", "primary_release_date.gte": since, page: i + 1 }]),
@@ -223,6 +231,11 @@ const queries = [
   ["tv", { with_original_language: "hi", "first_air_date.gte": freshFrom, "first_air_date.lte": freshTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { fresh: true }],
   ["movie", { with_original_language: "en", "primary_release_date.gte": freshFrom, "primary_release_date.lte": freshTo, sort_by: "popularity.desc", page: 1 }, { fresh: true }],
   ["tv", { with_original_language: "en", "first_air_date.gte": freshFrom, "first_air_date.lte": freshTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { fresh: true }],
+  // Upcoming (next ~6 weeks)
+  ["movie", { with_original_language: "hi", "primary_release_date.gte": upFrom, "primary_release_date.lte": upTo, sort_by: "popularity.desc", page: 1 }, { upcoming: true }],
+  ["tv", { with_original_language: "hi", "first_air_date.gte": upFrom, "first_air_date.lte": upTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { upcoming: true }],
+  ["movie", { with_original_language: "en", "primary_release_date.gte": upFrom, "primary_release_date.lte": upTo, sort_by: "popularity.desc", page: 1 }, { upcoming: true }],
+  ["tv", { with_original_language: "en", "first_air_date.gte": upFrom, "first_air_date.lte": upTo, sort_by: "popularity.desc", without_genres: NO_JUNK, page: 1 }, { upcoming: true }],
 ];
 
 const found = [];
@@ -253,7 +266,8 @@ for (const [kind, params, opts = {}] of queries) {
     const passesImdb = imdb && (imdbData.get(imdb)?.votes ?? 0) >= IMDB_VOTE_OVERRIDE[lang];
     // just-released sweep: no votes anywhere yet, so judge by poster + popularity
     const passesFresh = opts.fresh && r.poster_path && pulse;
-    if (!passesTmdb && !passesImdb && !passesFresh) continue;
+    const passesUpcoming = opts.upcoming && r.poster_path && r.popularity >= UPCOMING_POP[lang];
+    if (!passesTmdb && !passesImdb && !passesFresh && !passesUpcoming) continue;
     // a vote_average built on a handful of votes is noise (10.0 from two
     // votes) — leave it unrated; the IMDb dataset pass below scores it as
     // soon as IMDb has a rating, and the site shows "New" until then
