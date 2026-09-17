@@ -147,16 +147,22 @@ try {
 /* ---------- provisional titles ----------
    Release-week admissions (the fresh sweep, the 1-vote Hindi floor, the
    IMDb override) are on goodwill: TMDB has no votes yet, so we can't tell a
-   real release from direct-to-OTT filler on day one. A week in, IMDb can —
-   anything still short of real votes goes. Runs on every title in its
-   second-to-ninth week, so last week's admissions get audited too. */
+   real release from direct-to-OTT filler on day one. Later, IMDb can —
+   anything still short of real votes goes.
+   Three weeks, not one: Hindi titles build IMDb votes slowly (Last Man in
+   Tower, a Manoj Bajpayee theatrical release, had 56 after six days and
+   would have been dropped at the old day-7/100-vote bar). By week three
+   every genuine Hindi release in the catalogue is past 130 votes while
+   filler is still near zero. Starting at 21 days also puts this window
+   clear of the 14-day fresh sweep, which used to re-add a title in the
+   same run that dropped it. */
 {
-  const IMDB_KEEP = { hi: 100, en: 1000 };
+  const IMDB_KEEP = { hi: 50, en: 1000 };
   let dropped = 0;
   for (const [key, t] of existing) {
     if (!t.released) continue;
     const age = (Date.now() - new Date(t.released).getTime()) / 864e5;
-    if (age < 7 || age > 60) continue;
+    if (age < 21 || age > 60) continue;
     const votes = imdbData.get(t.imdb)?.votes ?? 0;
     if (votes >= IMDB_KEEP[t.lang]) continue;
     existing.delete(key);
@@ -186,7 +192,11 @@ const FRESH_DAYS = 14;
 // minimum TMDB popularity for a title under 45 days old (see the gate below)
 // (calibrated 2026-09: real English streaming releases run 50–250 on release
 // week, direct-to-video noise 8–20; Hindi popularity scores are ~10× smaller)
-const FRESH_POP = { hi: 2, en: 40 };
+// Hindi web series barely register on TMDB's popularity scale — Waiting Hai,
+// a 7-episode show with poster and backdrop, sat at 1.06 on release day and
+// was turned away by the old bar of 2. The day-21 audit below is what removes
+// anything admitted here that never finds an audience.
+const FRESH_POP = { hi: 1, en: 40 };
 const freshFrom = new Date(Date.now() - FRESH_DAYS * 864e5).toISOString().slice(0, 10);
 const freshTo = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 // Announced but not out yet, for the site's Upcoming shelf. Nobody has seen
