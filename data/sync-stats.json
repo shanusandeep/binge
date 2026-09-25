@@ -1,21 +1,21 @@
 {
   "sync": {
-    "at": "2026-09-24T17:53:21.455Z",
-    "durationSec": 186,
+    "at": "2026-09-25T05:11:09.555Z",
+    "durationSec": 359,
     "added": 14,
     "refreshed": 18,
     "total": 1533,
     "calls": {
-      "tmdb": 3759,
+      "tmdb": 3756,
       "omdb": 0,
       "imdbDataset": 1
     }
   },
   "enrich": {
-    "at": "2026-09-24T05:52:04.810Z",
+    "at": "2026-09-25T05:52:09.620Z",
     "calls": {
-      "wikipedia": 478,
-      "wikidata": 188,
+      "wikipedia": 436,
+      "wikidata": 171,
       "gemini": 3
     }
   }
