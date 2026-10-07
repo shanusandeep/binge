@@ -1,10 +1,10 @@
 {
   "sync": {
-    "at": "2026-10-07T06:13:21.531Z",
-    "durationSec": 226,
-    "added": 14,
+    "at": "2026-10-07T19:24:34.561Z",
+    "durationSec": 373,
+    "added": 16,
     "refreshed": 23,
-    "total": 1579,
+    "total": 1581,
     "calls": {
       "tmdb": 3855,
       "omdb": 0,
