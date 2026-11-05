@@ -1,12 +1,12 @@
 {
   "sync": {
-    "at": "2026-11-05T07:06:17.025Z",
-    "durationSec": 416,
-    "added": 17,
+    "at": "2026-11-05T20:41:47.572Z",
+    "durationSec": 278,
+    "added": 15,
     "refreshed": 20,
     "total": 1696,
     "calls": {
-      "tmdb": 4102,
+      "tmdb": 4097,
       "omdb": 0,
       "imdbDataset": 1
     }
