@@ -1,9 +1,9 @@
 {
   "sync": {
-    "at": "2026-11-23T07:55:12.891Z",
-    "durationSec": 216,
-    "added": 17,
-    "refreshed": 20,
+    "at": "2026-11-24T00:51:03.929Z",
+    "durationSec": 355,
+    "added": 18,
+    "refreshed": 22,
     "total": 1736,
     "calls": {
       "tmdb": 4118,
